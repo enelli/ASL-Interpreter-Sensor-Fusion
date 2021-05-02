@@ -18,7 +18,7 @@ def get_hand_hist():
 	return hist
 
 def get_image_size():
-	img = cv2.imread('gestures/0/100.jpg', 0)
+	img = cv2.imread('100.jpg', 0)
 	return img.shape
 
 image_x, image_y = get_image_size()
@@ -265,15 +265,11 @@ def text_mode(cam):
 
 			elif cv2.contourArea(contour) < 1000:
 				if word != '':
-					#print('yolo')
-					#say_text(text)
 					Thread(target=say_text, args=(word, )).start()
 				text = ""
 				word = ""
 		else:
 			if word != '':
-				#print('yolo1')
-				#say_text(text)
 				Thread(target=say_text, args=(word, )).start()
 			text = ""
 			word = ""

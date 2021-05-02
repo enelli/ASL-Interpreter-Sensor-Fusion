@@ -5,3 +5,4 @@ sklearn
 keras
 opencv-python
 pyttsx3
+tensorflow
