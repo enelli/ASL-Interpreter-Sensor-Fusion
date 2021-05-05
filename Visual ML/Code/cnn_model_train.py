@@ -12,7 +12,7 @@ from keras.layers.convolutional import MaxPooling2D
 from keras.utils import np_utils
 from keras.callbacks import ModelCheckpoint
 from keras import backend as K
-K.set_image_dim_ordering('tf')
+K.set_image_data_format('channels_last')
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
@@ -41,7 +41,7 @@ def cnn_model():
 	sgd = optimizers.SGD(lr=1e-2)
 	model.compile(loss='categorical_crossentropy', optimizer=sgd, metrics=['accuracy'])
 	filepath="cnn_model_keras2.h5"
-	checkpoint1 = ModelCheckpoint(filepath, monitor='val_acc', verbose=1, save_best_only=True, mode='max')
+	checkpoint1 = ModelCheckpoint(filepath, monitor='val_accuracy', verbose=1, save_best_only=True, mode='max')
 	callbacks_list = [checkpoint1]
 	#from keras.utils import plot_model
 	#plot_model(model, to_file='model.png', show_shapes=True)
