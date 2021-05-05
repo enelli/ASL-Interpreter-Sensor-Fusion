@@ -1,1 +1,9 @@
 Visual ML/Code/__pycache__/*
+Visual ML/Code/test_images
+Visual ML/Code/test_labels
+Visual ML/Code/train_images
+Visual ML/Code/train_labels
+Visual ML/Code/val_images
+Visual ML/Code/val_labels
+Visual ML/Code/hist
+Visual ML/Code/cnn_model_keras2.h5
