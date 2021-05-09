@@ -1,13 +1,15 @@
 import sys
 from Visual.final import recognize
-from SONAR.audio import play, record
+from SONAR.audio import SONAR
 
 import numpy as np
 
 WIDTH = 300
 HEIGHT = 300
 
-#play("SONAR/test.wav")
+s = SONAR()
+
+s.play("SONAR/test.wav")
 
 def thresh_func():
     ''' return a WIDTH x HEIGHT binary determination of 0s and 255s
@@ -17,3 +19,6 @@ def thresh_func():
 
 recognize()
 #recognize(thresh_func)
+
+# run cleanup
+s.destruct()
