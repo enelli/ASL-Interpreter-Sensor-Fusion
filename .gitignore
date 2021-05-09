@@ -1,7 +1,8 @@
-Visual ML/Code/__pycache__/*
-Visual ML/Code/test_images
-Visual ML/Code/test_labels
-Visual ML/Code/train_images
-Visual ML/Code/train_labels
-Visual ML/Code/val_images
-Visual ML/Code/val_labels
+Visual/__pycache__/*
+Visual/test_images
+Visual/test_labels
+Visual/train_images
+Visual/train_labels
+Visual/val_images
+Visual/val_labels
+Visual/hist
