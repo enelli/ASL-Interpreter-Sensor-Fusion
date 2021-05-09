@@ -87,7 +87,7 @@ hist = get_hand_hist()
 x, y, w, h = 300, 100, 300, 300
 is_voice_on = True
 
-def get_img_contour_thresh(img):
+def get_img_contour_thresh(img, thresh_func = None):
     img = cv2.flip(img, 1)
     imgHSV = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     dst = cv2.calcBackProject([imgHSV], [0, 1], hist, [0, 180, 0, 256], 1)
@@ -95,10 +95,13 @@ def get_img_contour_thresh(img):
     cv2.filter2D(dst,-1,disc,dst)
     blur = cv2.GaussianBlur(dst, (11,11), 0)
     blur = cv2.medianBlur(blur, 15)
-    thresh = cv2.threshold(blur,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)[1]
-    thresh = cv2.merge((thresh,thresh,thresh))
-    thresh = cv2.cvtColor(thresh, cv2.COLOR_BGR2GRAY)
-    thresh = thresh[y:y+h, x:x+w]
+    if thresh_func is None:
+        thresh = cv2.threshold(blur,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)[1]
+        thresh = cv2.merge((thresh,thresh,thresh))
+        thresh = cv2.cvtColor(thresh, cv2.COLOR_BGR2GRAY)
+        thresh = thresh[y:y+h, x:x+w]
+    else:
+        thresh = thresh_func()
     contours = cv2.findContours(thresh.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)[0]
     return img, contours, thresh
 
@@ -110,7 +113,7 @@ def say_text(text):
     engine.say(text)
     engine.runAndWait()
 
-def calculator_mode(cam):
+def calculator_mode(cam, thresh_func = None):
     global is_voice_on
     flag = {"first": False, "operator": False, "second": False, "clear": False}
     count_same_frames = 0
@@ -123,7 +126,7 @@ def calculator_mode(cam):
     while True:
         img = cam.read()[1]
         img = cv2.resize(img, (640, 480))
-        img, contours, thresh = get_img_contour_thresh(img)
+        img, contours, thresh = get_img_contour_thresh(img, thresh_func)
         old_pred_text = pred_text
         if len(contours) > 0:
             contour = max(contours, key = cv2.contourArea)
@@ -234,7 +237,7 @@ def calculator_mode(cam):
     else:
         return 0
 
-def text_mode(cam):
+def text_mode(cam, thresh_func = None):
     global is_voice_on
     text = ""
     word = ""
@@ -242,7 +245,7 @@ def text_mode(cam):
     while True:
         img = cam.read()[1]
         img = cv2.resize(img, (640, 480))
-        img, contours, thresh = get_img_contour_thresh(img)
+        img, contours, thresh = get_img_contour_thresh(img, thresh_func)
         old_text = text
         if len(contours) > 0:
             contour = max(contours, key = cv2.contourArea)
@@ -298,7 +301,7 @@ def text_mode(cam):
     else:
         return 0
 
-def recognize():
+def recognize(thresh_func = None):
     # not sure if line below does anything
     keras_predict(model, np.zeros((50, 50), dtype = np.uint8))
     cam = cv2.VideoCapture(1)
@@ -310,9 +313,9 @@ def recognize():
     keypress = 1
     while True:
         if keypress == 1:
-            keypress = text_mode(cam)
+            keypress = text_mode(cam, thresh_func)
         elif keypress == 2:
-            keypress = calculator_mode(cam)
+            keypress = calculator_mode(cam, thresh_func)
         else:
             break
 
