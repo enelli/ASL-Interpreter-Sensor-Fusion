@@ -72,4 +72,5 @@ def record(filename):
     wf.writeframes(b''.join(frames))
     wf.close()
 
-play("test.wav")
+if __name__ == "__main__":
+    play("test.wav")

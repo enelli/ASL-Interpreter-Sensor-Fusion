@@ -6,3 +6,4 @@ Visual/train_labels
 Visual/val_images
 Visual/val_labels
 Visual/hist
+SONAR/__pycache__/*

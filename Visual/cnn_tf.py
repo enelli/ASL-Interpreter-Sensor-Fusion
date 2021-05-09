@@ -5,11 +5,11 @@ import pickle, os, cv2
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 def get_image_size():
-	img = cv2.imread('100.jpg', 0)
+	img = cv2.imread('Visual/100.jpg', 0)
 	return img.shape
 
 def get_num_of_classes():
-	return len(os.listdir('gestures/'))
+	return len(os.listdir('Visual/gestures/'))
 
 image_x, image_y = get_image_size()
 
