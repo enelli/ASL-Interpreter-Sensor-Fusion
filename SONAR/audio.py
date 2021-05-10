@@ -11,16 +11,17 @@ class SONAR:
         self.chunk = 1024
         self.p = pyaudio.PyAudio()
         self.num_channels = 1  # use mono output for now
+        self.format = pyaudio.paInt16
 
         # stream for signal output
         # 'output = True' indicates that the sound will be played rather than recorded
-        self.output_stream = self.p.open(format = pyaudio.paInt16,
+        self.output_stream = self.p.open(format = self.format,
                                 frames_per_buffer = self.chunk,
                                 channels = self.num_channels,
                                 rate = self.fs,
                                 output = True)
         # stream for receiving signals
-        self.input_stream = self.p.open(format = pyaudio.paInt16,
+        self.input_stream = self.p.open(format = self.format,
                                 channels = self.num_channels,
                                 rate = self.fs,
                                 frames_per_buffer = self.chunk,
@@ -67,7 +68,7 @@ class SONAR:
         # Save the recorded data as a WAV file
         wf = wave.open(filename, 'wb')
         wf.setnchannels(self.num_channels)
-        wf.setsampwidth(self.p.get_sample_size(sample_format))
+        wf.setsampwidth(self.p.get_sample_size(self.format))
         wf.setframerate(self.fs)
         wf.writeframes(b''.join(frames))
         wf.close()
