@@ -301,7 +301,8 @@ def text_mode(cam, thresh_func = None):
     else:
         return 0
 
-def recognize(thresh_func = None):
+# pass in exit_func to synchronize thread exits
+def recognize(exit_func = None, thresh_func = None):
     # not sure if line below does anything
     keras_predict(model, np.zeros((50, 50), dtype = np.uint8))
     cam = cv2.VideoCapture(1)
@@ -317,6 +318,8 @@ def recognize(thresh_func = None):
         elif keypress == 2:
             keypress = calculator_mode(cam, thresh_func)
         else:
+            if exit_func is not None:
+                exit_func()
             break
 
 if __name__ == "__main__":

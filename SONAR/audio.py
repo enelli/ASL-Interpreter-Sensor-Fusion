@@ -1,11 +1,11 @@
 import pyaudio
 import wave
-import scipy.io.wavfile as wavfile
 import numpy as np
-import matplotlib.pyplot as plt
-import struct
 
 SAMPLE_RATE = 44100  # default audio sample rate
+# dimensions of the threshold array to feed into visual ML
+WIDTH = 300
+HEIGHT = 300
 
 class SONAR:
     ''' detect hand positions through SONAR '''
@@ -30,6 +30,13 @@ class SONAR:
                                 rate = self.fs,
                                 frames_per_buffer = self.chunk,
                                 input = True)
+
+        # allow other threads to abort this one
+        self.terminate = False
+
+    # allow camera thread to terminate audio threads
+    def abort(self):
+        self.terminate = True
                                 
 
     # play a tone at frequency freq for a given duration
@@ -48,32 +55,39 @@ class SONAR:
         data = wf.readframes(self.chunk)
 
         # Play the sound by writing the audio data to the stream
-        while data != b'':
+        # check for abort condition
+        while data != b'' and not self.terminate:
             self.output_stream.write(data)
             data = wf.readframes(self.chunk)
 
+        wf.close()
+
     # record audio input and write to filename
     def record(self, filename):
-        seconds = 1
+        seconds = 10
         print('Recording')
 
         frames = []  # Initialize array to store frames
 
         # Store data in chunks for 3 seconds
         for i in range(0, int(self.fs / self.chunk * seconds)):
+            if self.terminate: break
             data = self.input_stream.read(self.chunk)
+
+            # Visualize
             data_int = np.array(struct.unpack(str(self.chunk*2) + 'B', data), dtype='b')[::2]
-            f_vec = self.fs*np.arange(self.chunk/2)/self.chunk 
+            f_vec = self.fs * np.arange(self.chunk/2)/self.chunk 
             fft_data = (np.abs(np.fft.fft(data_int))[0:int(np.floor(self.chunk/2))])/self.chunk
             fft_data[1:] = 2*fft_data[1:]
             plt.plot(f_vec,fft_data)
+            
             frames.append(data)
 
-        plt.show()
         # Stop the stream
         self.input_stream.stop_stream()
 
         print('Finished recording')
+        plt.show()
 
         # Save the recorded data as a WAV file
         wf = wave.open(filename, 'wb')
@@ -83,6 +97,13 @@ class SONAR:
         wf.writeframes(b''.join(frames))
         wf.close()
 
+    def find_hand(self):
+        ''' return a WIDTH x HEIGHT binary determination of 0s and 255s
+        representing where the hand is, with (0,0) representing the top 
+        left of the screen'''
+        return np.zeros((WIDTH, HEIGHT), dtype=np.uint8)
+        
+
     # close all streams and terminate PortAudio interface
     def destruct(self):
         self.output_stream.close()
@@ -91,6 +112,6 @@ class SONAR:
 
 if __name__ == "__main__":
     s = SONAR()
-    s.record("record.wav")
+    s.play("test.wav")
     s.destruct()
-
+    
