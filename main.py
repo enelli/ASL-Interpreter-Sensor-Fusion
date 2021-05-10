@@ -15,15 +15,6 @@ class ASLThread(threading.Thread):
     def run(self):
         self.func()
 
-WIDTH = 300
-HEIGHT = 300
-
-def thresh_func():
-    ''' return a WIDTH x HEIGHT binary determination of 0s and 255s
-    representing where the hand is, with (0,0) representing the top 
-    left of the screen'''
-    return np.zeros((WIDTH, HEIGHT), dtype=np.uint8)
-
 
 # create audio object
 s = SONAR()
@@ -31,7 +22,7 @@ s = SONAR()
 # create concurrent threads for each object
 threads = []
 # camera thread
-threads.append(ASLThread(1, recognize))
+threads.append(ASLThread(1, lambda: recognize(s.abort)))
 # transmitter thread
 threads.append(ASLThread(2, lambda: s.play("SONAR/test.wav")))
 # receiver thread
@@ -42,9 +33,6 @@ for thread in threads:
 
 for thread in threads:
     thread.join()
-
-# recognize()
-# recognize(thresh_func)
 
 # run cleanup
 s.destruct()
