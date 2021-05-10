@@ -1,5 +1,9 @@
 import pyaudio
 import wave
+import scipy.io.wavfile as wavfile
+import numpy as np
+import matplotlib.pyplot as plt
+import struct
 
 SAMPLE_RATE = 44100  # default audio sample rate
 
@@ -50,7 +54,7 @@ class SONAR:
 
     # record audio input and write to filename
     def record(self, filename):
-        seconds = 10
+        seconds = 1
         print('Recording')
 
         frames = []  # Initialize array to store frames
@@ -58,8 +62,14 @@ class SONAR:
         # Store data in chunks for 3 seconds
         for i in range(0, int(self.fs / self.chunk * seconds)):
             data = self.input_stream.read(self.chunk)
+            data_int = np.array(struct.unpack(str(self.chunk*2) + 'B', data), dtype='b')[::2]
+            f_vec = self.fs*np.arange(self.chunk/2)/self.chunk 
+            fft_data = (np.abs(np.fft.fft(data_int))[0:int(np.floor(self.chunk/2))])/self.chunk
+            fft_data[1:] = 2*fft_data[1:]
+            plt.plot(f_vec,fft_data)
             frames.append(data)
 
+        plt.show()
         # Stop the stream
         self.input_stream.stop_stream()
 
@@ -81,5 +91,6 @@ class SONAR:
 
 if __name__ == "__main__":
     s = SONAR()
-    s.play("test.wav")
+    s.record("record.wav")
     s.destruct()
+
