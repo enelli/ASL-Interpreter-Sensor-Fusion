@@ -1,6 +1,9 @@
 import pyaudio
 import wave
 import numpy as np
+import struct
+import matplotlib.pyplot as plt
+import time
 
 SAMPLE_RATE = 44100  # default audio sample rate
 # dimensions of the threshold array to feed into visual ML
@@ -34,6 +37,9 @@ class SONAR:
         # allow other threads to abort this one
         self.terminate = False
 
+        # used for subtraction window
+        self.f_vec = self.fs * np.arange(self.chunk/2)/self.chunk 
+
     # allow camera thread to terminate audio threads
     def abort(self):
         self.terminate = True
@@ -64,7 +70,7 @@ class SONAR:
 
     # record audio input and write to filename
     def record(self, filename):
-        seconds = 10
+        seconds = 1
         print('Recording')
 
         frames = []  # Initialize array to store frames
@@ -74,12 +80,12 @@ class SONAR:
             if self.terminate: break
             data = self.input_stream.read(self.chunk)
 
-            # Visualize
+            # Visualize: 
+            # https://makersportal.com/blog/2018/9/17/audio-processing-in-python-part-ii-exploring-windowing-sound-pressure-levels-and-a-weighting-using-an-iphone-x
             data_int = np.array(struct.unpack(str(self.chunk*2) + 'B', data), dtype='b')[::2]
-            f_vec = self.fs * np.arange(self.chunk/2)/self.chunk 
             fft_data = (np.abs(np.fft.fft(data_int))[0:int(np.floor(self.chunk/2))])/self.chunk
             fft_data[1:] = 2*fft_data[1:]
-            plt.plot(f_vec,fft_data)
+            plt.plot(self.f_vec,fft_data)
             
             frames.append(data)
 
@@ -97,6 +103,19 @@ class SONAR:
         wf.writeframes(b''.join(frames))
         wf.close()
 
+
+    # Records two windows and subtracts them from each other
+    def subtract_window(self):
+        data = [self.input_stream.read(self.chunk) for _ in range(2)]
+        data_int = [np.array(struct.unpack(str(self.chunk*2) + 'B', data[i]), dtype='b')[::2] for i in range(2)]
+        fft_data = [(np.abs(np.fft.fft(data))[0:int(np.floor(self.chunk/2))])/self.chunk for data in data_int]
+        plt.plot(self.f_vec, fft_data[0])
+        plt.plot(self.f_vec, fft_data[1])
+        fft_subtract = np.subtract(fft_data[1], fft_data[0])
+        fft_subtract[1:] = 2*fft_subtract[1:]
+        plt.plot(self.f_vec, fft_subtract)
+        plt.show()
+
     def find_hand(self):
         ''' return a WIDTH x HEIGHT binary determination of 0s and 255s
         representing where the hand is, with (0,0) representing the top 
@@ -112,6 +131,7 @@ class SONAR:
 
 if __name__ == "__main__":
     s = SONAR()
-    s.play("test.wav")
+    # s.record("record.wav")
+    s.subtract_window()
     s.destruct()
     
