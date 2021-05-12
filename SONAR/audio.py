@@ -150,6 +150,8 @@ class SONAR:
                 # fft_data[f] is now the amplitude? of the fth frequency
                 # pass just the FMCW frequencies
                 fft_data = np.abs(np.fft.rfft(frames[:self.chunk]))[self.low_ind:self.high_ind]
+                # filter out insignificant parts
+                fft_data = np.where(fft_data < THRESH, 0, fft_data)
                 # compute time diff
                 last_freq = self.last_freq  # store to avoid changing this value mid-computation
                 time_diff = np.where(self.f_vec > last_freq, \
@@ -159,14 +161,14 @@ class SONAR:
                 #max_inds = fft_data.argsort()[-4:]
                 #freq = [self.f_vec[i] for i in max_inds]
                 #delays = [time_diff(f) for f in freq]
-                #plt.plot(self.f_vec,fft_data)
-                #plt.plot(self.f_vec,time_diff)  # valley at current freq
                 # for more sensible plot, start drawing from max distance
                 split = np.argmax(distance)
                 wrapped_distance = np.concatenate((distance[split:],distance[:split]))
                 wrapped_data = np.concatenate((fft_data[split:],fft_data[:split]))
                 # ideally maps distances to intensity
-                plt.plot(wrapped_distance, np.where(wrapped_data < THRESH, 0, wrapped_data))
+                #plt.plot(wrapped_distance, wrapped_data)
+                plt.plot(self.f_vec,fft_data)
+                plt.plot(self.f_vec,time_diff)  # valley at current freq
                 plt.draw()
                 plt.pause(0.0000001)
                 plt.clf()
