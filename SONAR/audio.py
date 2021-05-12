@@ -149,7 +149,10 @@ class SONAR:
                 max_inds = (fft_data - prev_window).argsort()[-4:] + self.low_ind
                 freq = [self.f_vec[i] for i in max_inds]
                 delays = [time_diff(f) for f in freq]
-                #plt.plot(self.f_vec[self.low_ind:self.high_ind],fft_data)
+                plt.plot(self.f_vec[self.low_ind:self.high_ind],fft_data)
+                plt.draw()
+                plt.pause(0.0000001)
+                plt.clf()
                 total_data += fft_data - prev_window  # show only the total change
                 prev_window = fft_data
                 frames = frames[self.chunk:]

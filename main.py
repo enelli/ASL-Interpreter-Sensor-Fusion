@@ -35,11 +35,13 @@ threads.append(ASLThread(2, lambda: s.transmit(LOW_FREQ, HIGH_FREQ, DURATION)))
 # receiver thread
 #threads.append(ASLThread(3, s.receive))
 
+plt.ion()
+plt.show()
+
 for thread in threads:
     thread.start()
 
 s.receive()
-plt.show()
 
 for thread in threads:
     thread.join()
