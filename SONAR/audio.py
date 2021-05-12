@@ -56,6 +56,8 @@ class SONAR:
 
         self.amp = 0.8  # amplitude for signal sending
 
+        self.time = 0
+
     # allow camera thread to terminate audio threads
     def abort(self):
         self.terminate = True
@@ -64,8 +66,10 @@ class SONAR:
     # play a tone at frequency freq for a given duration
     def play_freq(self, freq, duration = 1):
         cur_frame = 0
+        self.last_freq = freq
         # signal: sin (2 pi * freq * time)
         while cur_frame < duration * self.fs and not self.terminate:
+        #while not self.terminate:
             # number of frames to produce on this iteration
             num_frames = self.output_stream.get_write_available()
             times = np.arange(cur_frame, cur_frame + num_frames) / self.fs
@@ -74,6 +78,7 @@ class SONAR:
             signal = self.amp * np.sin(times)
             signal = signal.astype(np.float32)
             self.output_stream.write(signal.tobytes())
+            self.time = time.time()
             cur_frame += num_frames
 
     def chirp(self, low_freq, high_freq, duration = 2):
@@ -113,7 +118,9 @@ class SONAR:
         ''' continuously broadcast FMCW chirps from low_freq
         to high_freq spanning duration seconds'''
         while not self.terminate:
-            self.chirp(low_freq, high_freq, duration)
+            self.play_freq((low_freq + high_freq)/2, 0.1)
+            time.sleep(duration)
+            #self.chirp(low_freq, high_freq, duration)
 
     def play(self, filename):
         # Open the sound file 
@@ -142,6 +149,7 @@ class SONAR:
             # ensure self.last_freq > freq always
             return (self.last_freq - freq) / self.slope
         frames = []
+        prev_window = np.zeros(self.high_ind - self.low_ind)
         while not self.terminate:  # continuously read until termination
             num_frames = self.input_stream.get_read_available()
             input_signal = np.fromstring(self.input_stream.read(num_frames), dtype=np.float32)
@@ -151,27 +159,35 @@ class SONAR:
                 # pass just the FMCW frequencies
                 fft_data = np.abs(np.fft.rfft(frames[:self.chunk]))[self.low_ind:self.high_ind]
                 # filter out insignificant parts
-                fft_data = np.where(fft_data < THRESH, 0, fft_data)
+                #fft_data = np.where(fft_data < THRESH, 0, fft_data)
+                # extract fundamental frequency
+                max_ind = fft_data.argmax()
+                freq = self.f_vec[max_ind]
+                if abs(freq - self.last_freq) < 100:
+                    time_diff = time.time() - self.time
+                    self.last_freq = 0  # already read
+                    print("time diff:", time_diff)
                 # compute time diff
-                last_freq = self.last_freq  # store to avoid changing this value mid-computation
-                time_diff = np.where(self.f_vec > last_freq, \
-                    last_freq + self.bandwidth - self.f_vec, last_freq - self.f_vec) / self.slope
-                distance = SOUND_SPEED * time_diff
-                # extract 4 largest frequencies
-                #max_inds = fft_data.argsort()[-4:]
-                #freq = [self.f_vec[i] for i in max_inds]
-                #delays = [time_diff(f) for f in freq]
-                # for more sensible plot, start drawing from max distance
-                split = np.argmax(distance)
-                wrapped_distance = np.concatenate((distance[split:],distance[:split]))
-                wrapped_data = np.concatenate((fft_data[split:],fft_data[:split]))
-                # ideally maps distances to intensity
-                #plt.plot(wrapped_distance, wrapped_data)
-                plt.plot(self.f_vec,fft_data)
-                plt.plot(self.f_vec,time_diff)  # valley at current freq
-                plt.draw()
-                plt.pause(0.0000001)
-                plt.clf()
+                #last_freq = self.last_freq  # store to avoid changing this value mid-computation
+                #time_diff = np.where(self.f_vec > last_freq, \
+                #    last_freq + self.bandwidth - self.f_vec, last_freq - self.f_vec) / self.slope
+                #distance = SOUND_SPEED * time_diff
+                ## extract 4 largest frequencies
+                ##max_inds = fft_data.argsort()[-4:]
+                ##freq = [self.f_vec[i] for i in max_inds]
+                ##delays = [time_diff(f) for f in freq]
+                ## for more sensible plot, start drawing from max distance
+                #split = np.argmax(distance)
+                #wrapped_distance = np.concatenate((distance[split:],distance[:split]))
+                #wrapped_data = np.concatenate((fft_data[split:],fft_data[:split]))
+                ## ideally maps distances to intensity
+                #plt.plot(wrapped_distance, wrapped_data - prev_window)
+                ##plt.plot(self.f_vec,fft_data)
+                ##plt.plot(self.f_vec,time_diff)  # valley at current freq
+                #plt.draw()
+                #plt.pause(0.0000001)
+                #plt.clf()
+                #prev_window = wrapped_data
                 frames = []  # completely clear window
 
     # record audio input and write to filename
