@@ -23,7 +23,7 @@ s = SONAR()
 # FMCW chirp setup
 LOW_FREQ = 220
 HIGH_FREQ = 880
-DURATION = 5  # seconds
+DURATION = 0.5  # seconds
 s.initFMCW(LOW_FREQ, HIGH_FREQ, DURATION)
 
 # create concurrent threads for each object
