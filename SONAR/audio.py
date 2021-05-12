@@ -4,6 +4,7 @@ import numpy as np
 import struct
 import matplotlib.pyplot as plt
 import time
+from math import log
 
 SAMPLE_RATE = 44100  # default audio sample rate
 # dimensions of the threshold array to feed into visual ML
@@ -18,20 +19,19 @@ class SONAR:
         self.chunk = 1024
         self.p = pyaudio.PyAudio()
         self.num_channels = 1  # use mono output for now
-        self.output_format = pyaudio.paFloat32
-        self.input_format = pyaudio.paInt16
+        self.format = pyaudio.paFloat32
 
         # stream for signal output
         # 'output = True' indicates that the sound will be played rather than recorded
         # I have absolutely no idea what device_index is for but it prevents segfaults
-        self.output_stream = self.p.open(format = self.output_format,
+        self.output_stream = self.p.open(format = self.format,
                                 frames_per_buffer = self.chunk,
                                 channels = self.num_channels,
                                 rate = self.fs,
                                 output = True,
                                 output_device_index = None)
         # stream for receiving signals
-        self.input_stream = self.p.open(format = self.input_format,
+        self.input_stream = self.p.open(format = self.format,
                                 channels = self.num_channels,
                                 rate = self.fs,
                                 frames_per_buffer = self.chunk,
@@ -41,7 +41,7 @@ class SONAR:
         # allow other threads to abort this one
         self.terminate = False
 
-        # used for subtraction window
+        # fft frequency window
         self.f_vec = self.fs * np.arange(self.chunk/2)/self.chunk 
 
         self.amp = 0.8  # amplitude for signal sending
@@ -55,11 +55,12 @@ class SONAR:
     def play_freq(self, freq, duration = 1):
         cur_frame = 0
         # signal: sin (2 pi * freq * time)
-        while cur_frame < duration * self.fs:
+        while cur_frame < duration * self.fs and not self.terminate:
             # number of frames to produce on this iteration
             num_frames = self.output_stream.get_write_available()
             times = np.arange(cur_frame, cur_frame + num_frames) / self.fs
             times = times * 2 * np.pi * freq
+            # account for amplitude adjustments
             signal = self.amp * np.sin(times)
             signal = signal.astype(np.float32)
             self.output_stream.write(signal.tobytes())
@@ -83,6 +84,25 @@ class SONAR:
             data = wf.readframes(self.chunk)
 
         wf.close()
+
+    # receive and process audio input
+    def receive(self):
+        frames = []
+        num = 50
+        total_data = np.zeros(num - 1)
+        while not self.terminate:  # continuously read until termination
+            num_frames = self.input_stream.get_read_available()
+            input_signal = np.fromstring(self.input_stream.read(num_frames), dtype=np.float32)
+            frames = np.concatenate((frames, input_signal))
+            if len(frames) >= self.chunk:  # wait until we have a full chunk before processing
+                # fft_data[f] is now the amplitude? of the fth frequency
+                fft_data = np.abs(np.fft.rfft(frames[:self.chunk]))
+                #max_val = max(fft_data[2:])
+                #max_ind = np.where(fft_data == max_val)[0][0] 
+                #freq = self.f_vec[max_ind]
+                total_data += fft_data[1:num]
+                frames = frames[self.chunk:]
+        plt.plot(self.f_vec[1:num],total_data)
 
     # record audio input and write to filename
     def record(self, filename):
@@ -114,7 +134,7 @@ class SONAR:
         # Save the recorded data as a WAV file
         wf = wave.open(filename, 'wb')
         wf.setnchannels(self.num_channels)
-        wf.setsampwidth(self.p.get_sample_size(self.input_format))
+        wf.setsampwidth(self.p.get_sample_size(self.format))
         wf.setframerate(self.fs)
         wf.writeframes(b''.join(frames))
         wf.close()
@@ -147,8 +167,8 @@ class SONAR:
 
 if __name__ == "__main__":
     s = SONAR()
-    s.play_freq(880, 1)
-    s.record("record.wav")
+    s.play_freq(440, 1)
+    s.receive()
     #s.subtract_window()
     s.destruct()
     
