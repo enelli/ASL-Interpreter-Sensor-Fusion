@@ -4,11 +4,14 @@ import numpy as np
 import struct
 import matplotlib.pyplot as plt
 import time
+from math import log
 
 SAMPLE_RATE = 44100  # default audio sample rate
 # dimensions of the threshold array to feed into visual ML
 WIDTH = 300
 HEIGHT = 300
+SOUND_SPEED = 343
+THRESH = 1  # FFT threshold to filter out noise
 
 class SONAR:
     ''' detect hand positions through SONAR '''
@@ -18,27 +21,40 @@ class SONAR:
         self.chunk = 1024
         self.p = pyaudio.PyAudio()
         self.num_channels = 1  # use mono output for now
-        self.format = pyaudio.paInt16
+        self.format = pyaudio.paFloat32
 
         # stream for signal output
         # 'output = True' indicates that the sound will be played rather than recorded
+        # I have absolutely no idea what device_index is for but it prevents segfaults
         self.output_stream = self.p.open(format = self.format,
                                 frames_per_buffer = self.chunk,
                                 channels = self.num_channels,
                                 rate = self.fs,
-                                output = True)
+                                output = True,
+                                output_device_index = None)
         # stream for receiving signals
         self.input_stream = self.p.open(format = self.format,
                                 channels = self.num_channels,
                                 rate = self.fs,
                                 frames_per_buffer = self.chunk,
-                                input = True)
+                                input = True,
+                                input_device_index = None)
 
         # allow other threads to abort this one
         self.terminate = False
 
-        # used for subtraction window
-        self.f_vec = self.fs * np.arange(self.chunk/2)/self.chunk 
+        # fft frequency window
+        # will be trimmed to FMCW frequencies
+        self.f_vec = self.fs * np.arange(self.chunk)/self.chunk 
+
+        # FMCW params
+        self.last_freq = 0  # last frequency broadcasted
+        self.slope = 0  # FMCW slope
+        self.bandwidth = 0  # sweep range
+        self.low_ind = 0  # filter out frequencies below f_vec[low_ind]
+        self.high_ind = 0  # filter out frequencies above f_vec[high_ind]
+
+        self.amp = 0.8  # amplitude for signal sending
 
     # allow camera thread to terminate audio threads
     def abort(self):
@@ -47,8 +63,57 @@ class SONAR:
 
     # play a tone at frequency freq for a given duration
     def play_freq(self, freq, duration = 1):
-        pass
+        cur_frame = 0
+        # signal: sin (2 pi * freq * time)
+        while cur_frame < duration * self.fs and not self.terminate:
+            # number of frames to produce on this iteration
+            num_frames = self.output_stream.get_write_available()
+            times = np.arange(cur_frame, cur_frame + num_frames) / self.fs
+            times = times * 2 * np.pi * freq
+            # account for amplitude adjustments
+            signal = self.amp * np.sin(times)
+            signal = signal.astype(np.float32)
+            self.output_stream.write(signal.tobytes())
+            cur_frame += num_frames
 
+    def chirp(self, low_freq, high_freq, duration = 2):
+        ''' broadcast an FMCW chirp ranging from low_freq
+        to high_freq, spanning duration seconds 
+        freq at time t is given by (low_freq * (duration - t) + high_freq * t) / duration
+        signal is given by sin (2 pi * freq * t)'''
+        cur_frame = 0
+        ending_frame = duration * self.fs
+        while cur_frame < ending_frame and not self.terminate:
+            # number of frames to produce on this iteration
+            num_frames = self.output_stream.get_write_available()
+            # never go beyond ending_frame
+            num_frames = min(num_frames, ending_frame - cur_frame)
+            if num_frames:
+                times = np.arange(cur_frame, cur_frame + num_frames) / self.fs
+                freq = (low_freq * (duration - times) + high_freq * times) / duration
+                arg = np.pi * 2 * np.multiply(freq, times)
+                signal = self.amp * np.sin(arg)
+                # necessary data type conversions (output is static otherwise)
+                signal = signal.astype(np.float32)
+                self.output_stream.write(signal.tobytes())
+                cur_frame += num_frames
+                self.last_freq = freq[-1]  # store most recent frequency as the current freq
+    
+    def init_fmcw(self, low_freq, high_freq, duration):
+        ''' initialize slope and last_freq for fmcw'''
+        self.bandwidth = high_freq - low_freq
+        self.slope = self.bandwidth / duration
+        self.last_freq = low_freq
+        # filters for FMCW frequencies
+        self.low_ind = int(low_freq * self.chunk / self.fs)
+        self.high_ind = int(high_freq * self.chunk / self.fs)
+        self.f_vec = self.f_vec[self.low_ind:self.high_ind]
+
+    def transmit(self, low_freq, high_freq, duration = 2):
+        ''' continuously broadcast FMCW chirps from low_freq
+        to high_freq spanning duration seconds'''
+        while not self.terminate:
+            self.chirp(low_freq, high_freq, duration)
 
     def play(self, filename):
         # Open the sound file 
@@ -67,6 +132,47 @@ class SONAR:
             data = wf.readframes(self.chunk)
 
         wf.close()
+
+    # receive and process audio input
+    def receive(self):
+        def time_diff(freq):
+            # given a frequency, determine time offset relative to
+            # current broadcast frequency
+            if (freq > self.last_freq): freq -= self.bandwidth
+            # ensure self.last_freq > freq always
+            return (self.last_freq - freq) / self.slope
+        frames = []
+        while not self.terminate:  # continuously read until termination
+            num_frames = self.input_stream.get_read_available()
+            input_signal = np.fromstring(self.input_stream.read(num_frames), dtype=np.float32)
+            frames = np.concatenate((frames, input_signal))
+            if len(frames) >= self.chunk:  # wait until we have a full chunk before processing
+                # fft_data[f] is now the amplitude? of the fth frequency
+                # pass just the FMCW frequencies
+                fft_data = np.abs(np.fft.rfft(frames[:self.chunk]))[self.low_ind:self.high_ind]
+                # filter out insignificant parts
+                fft_data = np.where(fft_data < THRESH, 0, fft_data)
+                # compute time diff
+                last_freq = self.last_freq  # store to avoid changing this value mid-computation
+                time_diff = np.where(self.f_vec > last_freq, \
+                    last_freq + self.bandwidth - self.f_vec, last_freq - self.f_vec) / self.slope
+                distance = SOUND_SPEED * time_diff
+                # extract 4 largest frequencies
+                #max_inds = fft_data.argsort()[-4:]
+                #freq = [self.f_vec[i] for i in max_inds]
+                #delays = [time_diff(f) for f in freq]
+                # for more sensible plot, start drawing from max distance
+                split = np.argmax(distance)
+                wrapped_distance = np.concatenate((distance[split:],distance[:split]))
+                wrapped_data = np.concatenate((fft_data[split:],fft_data[:split]))
+                # ideally maps distances to intensity
+                #plt.plot(wrapped_distance, wrapped_data)
+                plt.plot(self.f_vec,fft_data)
+                plt.plot(self.f_vec,time_diff)  # valley at current freq
+                plt.draw()
+                plt.pause(0.0000001)
+                plt.clf()
+                frames = []  # completely clear window
 
     # record audio input and write to filename
     def record(self, filename):
@@ -116,6 +222,12 @@ class SONAR:
         plt.plot(self.f_vec, fft_subtract)
         plt.show()
 
+    def match(self, signal):
+        ''' given an input signal of frequencies, match them
+        to self.fmcw_sweep and return the index of the most similar
+        segment '''
+        pass
+
     def find_hand(self):
         ''' return a WIDTH x HEIGHT binary determination of 0s and 255s
         representing where the hand is, with (0,0) representing the top 
@@ -131,6 +243,8 @@ class SONAR:
 
 if __name__ == "__main__":
     s = SONAR()
-    s.record("output.wav")
-    # s.subtract_window()
+    s.chirp(220, 880, 5)
+    #s.play_freq(440, 1)
+    #s.receive()
+    #s.subtract_window()
     s.destruct()

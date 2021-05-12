@@ -3,6 +3,7 @@ from Visual.final import recognize
 from SONAR.audio import SONAR
 
 import numpy as np
+import matplotlib.pyplot as plt
 import threading
 
 # create separate threads for video and SONAR
@@ -19,17 +20,28 @@ class ASLThread(threading.Thread):
 # create audio object
 s = SONAR()
 
+# FMCW chirp setup
+LOW_FREQ = 19220
+HIGH_FREQ = 19880
+DURATION = 2  # seconds
+s.init_fmcw(LOW_FREQ, HIGH_FREQ, DURATION)
+
 # create concurrent threads for each object
 threads = []
 # camera thread
 threads.append(ASLThread(1, lambda: recognize(s.abort)))
 # transmitter thread
-threads.append(ASLThread(2, lambda: s.play("SONAR/test.wav")))
+threads.append(ASLThread(2, lambda: s.transmit(LOW_FREQ, HIGH_FREQ, DURATION)))
 # receiver thread
-threads.append(ASLThread(3, lambda: s.record("output.wav")))
+#threads.append(ASLThread(3, s.receive))
+
+plt.ion()
+plt.show()
 
 for thread in threads:
     thread.start()
+
+s.receive()
 
 for thread in threads:
     thread.join()
