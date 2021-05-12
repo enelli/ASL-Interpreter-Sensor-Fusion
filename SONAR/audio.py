@@ -79,9 +79,12 @@ class SONAR:
         freq at time t is given by (low_freq * (duration - t) + high_freq * t) / duration
         signal is given by sin (2 pi * freq * t)'''
         cur_frame = 0
-        while cur_frame < duration * self.fs and not self.terminate:
+        ending_frame = duration * self.fs
+        while cur_frame < ending_frame and not self.terminate:
             # number of frames to produce on this iteration
             num_frames = self.output_stream.get_write_available()
+            # never go beyond ending_frame
+            num_frames = min(num_frames, ending_frame - cur_frame)
             if num_frames:
                 times = np.arange(cur_frame, cur_frame + num_frames) / self.fs
                 freq = (low_freq * (duration - times) + high_freq * times) / duration
