@@ -1,76 +1,136 @@
 import pyaudio
 import wave
+import numpy as np
+import struct
+import matplotlib.pyplot as plt
+import time
+
+SAMPLE_RATE = 44100  # default audio sample rate
+# dimensions of the threshold array to feed into visual ML
+WIDTH = 300
+HEIGHT = 300
+
+class SONAR:
+    ''' detect hand positions through SONAR '''
+    def __init__(self, samp = SAMPLE_RATE):
+        # audio parameters setup
+        self.fs = samp  # audio sample rate
+        self.chunk = 1024
+        self.p = pyaudio.PyAudio()
+        self.num_channels = 1  # use mono output for now
+        self.format = pyaudio.paInt16
+
+        # stream for signal output
+        # 'output = True' indicates that the sound will be played rather than recorded
+        self.output_stream = self.p.open(format = self.format,
+                                frames_per_buffer = self.chunk,
+                                channels = self.num_channels,
+                                rate = self.fs,
+                                output = True)
+        # stream for receiving signals
+        self.input_stream = self.p.open(format = self.format,
+                                channels = self.num_channels,
+                                rate = self.fs,
+                                frames_per_buffer = self.chunk,
+                                input = True)
+
+        # allow other threads to abort this one
+        self.terminate = False
+
+        # used for subtraction window
+        self.f_vec = self.fs * np.arange(self.chunk/2)/self.chunk 
+
+    # allow camera thread to terminate audio threads
+    def abort(self):
+        self.terminate = True
+                                
+
+    # play a tone at frequency freq for a given duration
+    def play_freq(self, freq, duration = 1):
+        pass
 
 
-def play(filename):
+    def play(self, filename):
+        # Open the sound file 
+        wf = wave.open(filename, 'rb')
 
-    # Set chunk size of 1024 samples per data frame
-    chunk = 1024  
+        if wf.getnchannels() != self.num_channels:
+            raise Exception("Unsupported number of audio channels")
 
-    # Open the sound file 
-    wf = wave.open(filename, 'rb')
+        # Read data in chunks
+        data = wf.readframes(self.chunk)
 
-    # Create an interface to PortAudio
-    p = pyaudio.PyAudio()
+        # Play the sound by writing the audio data to the stream
+        # check for abort condition
+        while data != b'' and not self.terminate:
+            self.output_stream.write(data)
+            data = wf.readframes(self.chunk)
 
-    # Open a .Stream object to write the WAV file to
-    # 'output = True' indicates that the sound will be played rather than recorded
-    stream = p.open(format = p.get_format_from_width(wf.getsampwidth()),
-                    channels = wf.getnchannels(),
-                    rate = wf.getframerate(),
-                    output = True)
+        wf.close()
 
-    # Read data in chunks
-    data = wf.readframes(chunk)
+    # record audio input and write to filename
+    def record(self, filename):
+        seconds = 10
+        print('Recording')
 
-    # Play the sound by writing the audio data to the stream
-    while data != b'':
-        stream.write(data)
-        data = wf.readframes(chunk)
+        frames = []  # Initialize array to store frames
 
-    # Close and terminate the stream
-    stream.close()
-    p.terminate()
+        # Store data in chunks for 3 seconds
+        for i in range(0, int(self.fs / self.chunk * seconds)):
+            if self.terminate: break
+            data = self.input_stream.read(self.chunk)
 
-def record(filename):
-    chunk = 1024  # Record in chunks of 1024 samples
-    sample_format = pyaudio.paInt16  # 16 bits per sample
-    channels = 2
-    fs = 44100  # Record at 44100 samples per second
-    seconds = 10
+            # Visualize: 
+            # https://makersportal.com/blog/2018/9/17/audio-processing-in-python-part-ii-exploring-windowing-sound-pressure-levels-and-a-weighting-using-an-iphone-x
+            data_int = np.array(struct.unpack(str(self.chunk*2) + 'B', data), dtype='b')[::2]
+            fft_data = (np.abs(np.fft.fft(data_int))[0:int(np.floor(self.chunk/2))])/self.chunk
+            fft_data[1:] = 2*fft_data[1:]
+            plt.plot(self.f_vec,fft_data)
+            
+            frames.append(data)
 
-    p = pyaudio.PyAudio()  # Create an interface to PortAudio
+        # Stop the stream
+        self.input_stream.stop_stream()
 
-    print('Recording')
+        print('Finished recording')
+        plt.show()
 
-    stream = p.open(format=sample_format,
-                    channels=channels,
-                    rate=fs,
-                    frames_per_buffer=chunk,
-                    input=True)
+        # Save the recorded data as a WAV file
+        wf = wave.open(filename, 'wb')
+        wf.setnchannels(self.num_channels)
+        wf.setsampwidth(self.p.get_sample_size(self.format))
+        wf.setframerate(self.fs)
+        wf.writeframes(b''.join(frames))
+        wf.close()
 
-    frames = []  # Initialize array to store frames
 
-    # Store data in chunks for 3 seconds
-    for i in range(0, int(fs / chunk * seconds)):
-        data = stream.read(chunk)
-        frames.append(data)
+    # Records two windows and subtracts them from each other
+    def subtract_window(self):
+        data = [self.input_stream.read(self.chunk) for _ in range(2)]
+        data_int = [np.array(struct.unpack(str(self.chunk*2) + 'B', data[i]), dtype='b')[::2] for i in range(2)]
+        fft_data = [(np.abs(np.fft.fft(data))[0:int(np.floor(self.chunk/2))])/self.chunk for data in data_int]
+        plt.plot(self.f_vec, fft_data[0])
+        plt.plot(self.f_vec, fft_data[1])
+        fft_subtract = np.subtract(fft_data[1], fft_data[0])
+        fft_subtract[1:] = 2*fft_subtract[1:]
+        plt.plot(self.f_vec, fft_subtract)
+        plt.show()
 
-    # Stop and close the stream 
-    stream.stop_stream()
-    stream.close()
-    # Terminate the PortAudio interface
-    p.terminate()
+    def find_hand(self):
+        ''' return a WIDTH x HEIGHT binary determination of 0s and 255s
+        representing where the hand is, with (0,0) representing the top 
+        left of the screen'''
+        return np.zeros((WIDTH, HEIGHT), dtype=np.uint8)
+        
 
-    print('Finished recording')
+    # close all streams and terminate PortAudio interface
+    def destruct(self):
+        self.output_stream.close()
+        self.input_stream.close()
+        self.p.terminate()
 
-    # Save the recorded data as a WAV file
-    wf = wave.open(filename, 'wb')
-    wf.setnchannels(channels)
-    wf.setsampwidth(p.get_sample_size(sample_format))
-    wf.setframerate(fs)
-    wf.writeframes(b''.join(frames))
-    wf.close()
-
-# play("test.wav")
-record("output.wav")
+if __name__ == "__main__":
+    s = SONAR()
+    s.record("output.wav")
+    # s.subtract_window()
+    s.destruct()
