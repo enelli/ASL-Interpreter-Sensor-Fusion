@@ -144,7 +144,7 @@ class SONAR:
         frames = []
         while not self.terminate:  # continuously read until termination
             num_frames = self.input_stream.get_read_available()
-            input_signal = np.fromstring(self.input_stream.read(num_frames), dtype=np.float32)
+            input_signal = np.fromstring(self.input_stream.read(num_frames, exception_on_overflow=False), dtype=np.float32)
             frames = np.concatenate((frames, input_signal))
             if len(frames) >= self.chunk:  # wait until we have a full chunk before processing
                 # fft_data[f] is now the amplitude? of the fth frequency
@@ -243,9 +243,10 @@ class SONAR:
 
 if __name__ == "__main__":
     s = SONAR()
-    s.chirp(220, 880, 5)
+    #s.chirp(220, 880, 5)
     #s.play_freq(440, 1)
-    #s.receive()
+    s.init_fmcw(200, 800, 5)
+    s.receive()
     #s.subtract_window()
     s.destruct()
     
