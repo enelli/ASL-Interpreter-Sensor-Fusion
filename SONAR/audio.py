@@ -66,6 +66,22 @@ class SONAR:
             self.output_stream.write(signal.tobytes())
             cur_frame += num_frames
 
+    def chirp(self, low_freq, high_freq, duration = 2):
+        ''' broadcast an FMCW chirp ranging from low_freq
+        to high_freq, spanning duration seconds 
+        freq at time t is given by (low_freq * (duration - t) + high_freq * t) / duration
+        signal is given by sin (2 pi * freq * t)'''
+        cur_frame = 0
+        while cur_frame < duration * self.fs and not self.terminate:
+            # number of frames to produce on this iteration
+            num_frames = self.output_stream.get_write_available()
+            times = np.arange(cur_frame, cur_frame + num_frames) / self.fs
+            freq = (low_freq * (duration - times) + high_freq * times) / duration
+            arg = np.pi * 2 * np.multiply(freq, times)
+            signal = self.amp * np.sin(arg)
+            signal = signal.astype(np.float32)
+            self.output_stream.write(signal.tobytes())
+            cur_frame += num_frames
 
     def play(self, filename):
         # Open the sound file 
@@ -167,8 +183,9 @@ class SONAR:
 
 if __name__ == "__main__":
     s = SONAR()
-    s.play_freq(440, 1)
-    s.receive()
+    s.chirp(220, 880, 5)
+    #s.play_freq(440, 1)
+    #s.receive()
     #s.subtract_window()
     s.destruct()
     

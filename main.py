@@ -25,7 +25,7 @@ threads = []
 # camera thread
 threads.append(ASLThread(1, lambda: recognize(s.abort)))
 # transmitter thread
-threads.append(ASLThread(2, lambda: s.play_freq(440, 10)))
+threads.append(ASLThread(2, lambda: s.chirp(220, 880, 5)))
 # receiver thread
 #threads.append(ASLThread(3, s.receive))
 
