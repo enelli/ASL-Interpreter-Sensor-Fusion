@@ -18,27 +18,33 @@ class SONAR:
         self.chunk = 1024
         self.p = pyaudio.PyAudio()
         self.num_channels = 1  # use mono output for now
-        self.format = pyaudio.paInt16
+        self.output_format = pyaudio.paFloat32
+        self.input_format = pyaudio.paInt16
 
         # stream for signal output
         # 'output = True' indicates that the sound will be played rather than recorded
-        self.output_stream = self.p.open(format = self.format,
+        # I have absolutely no idea what device_index is for but it prevents segfaults
+        self.output_stream = self.p.open(format = self.output_format,
                                 frames_per_buffer = self.chunk,
                                 channels = self.num_channels,
                                 rate = self.fs,
-                                output = True)
+                                output = True,
+                                output_device_index = None)
         # stream for receiving signals
-        self.input_stream = self.p.open(format = self.format,
+        self.input_stream = self.p.open(format = self.input_format,
                                 channels = self.num_channels,
                                 rate = self.fs,
                                 frames_per_buffer = self.chunk,
-                                input = True)
+                                input = True,
+                                input_device_index = None)
 
         # allow other threads to abort this one
         self.terminate = False
 
         # used for subtraction window
         self.f_vec = self.fs * np.arange(self.chunk/2)/self.chunk 
+
+        self.amp = 0.8  # amplitude for signal sending
 
     # allow camera thread to terminate audio threads
     def abort(self):
@@ -47,7 +53,17 @@ class SONAR:
 
     # play a tone at frequency freq for a given duration
     def play_freq(self, freq, duration = 1):
-        pass
+        cur_frame = 0
+        # signal: sin (2 pi * freq * time)
+        while cur_frame < duration * self.fs:
+            # number of frames to produce on this iteration
+            num_frames = self.output_stream.get_write_available()
+            times = np.arange(cur_frame, cur_frame + num_frames) / self.fs
+            times = times * 2 * np.pi * freq
+            signal = self.amp * np.sin(times)
+            signal = signal.astype(np.float32)
+            self.output_stream.write(signal.tobytes())
+            cur_frame += num_frames
 
 
     def play(self, filename):
@@ -98,7 +114,7 @@ class SONAR:
         # Save the recorded data as a WAV file
         wf = wave.open(filename, 'wb')
         wf.setnchannels(self.num_channels)
-        wf.setsampwidth(self.p.get_sample_size(self.format))
+        wf.setsampwidth(self.p.get_sample_size(self.input_format))
         wf.setframerate(self.fs)
         wf.writeframes(b''.join(frames))
         wf.close()
@@ -131,7 +147,8 @@ class SONAR:
 
 if __name__ == "__main__":
     s = SONAR()
-    # s.record("record.wav")
-    s.subtract_window()
+    s.play_freq(880, 1)
+    s.record("record.wav")
+    #s.subtract_window()
     s.destruct()
     
