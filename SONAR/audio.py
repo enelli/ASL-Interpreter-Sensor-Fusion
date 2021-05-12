@@ -43,6 +43,8 @@ class SONAR:
 
         # fft frequency window
         self.f_vec = self.fs * np.arange(self.chunk/2)/self.chunk 
+        # single FMCW sweep signal, for receiver to match against
+        self.fmcw_sweep = []
 
         self.amp = 0.8  # amplitude for signal sending
 
@@ -66,22 +68,41 @@ class SONAR:
             self.output_stream.write(signal.tobytes())
             cur_frame += num_frames
 
-    def chirp(self, low_freq, high_freq, duration = 2):
+    def chirp(self, low_freq, high_freq, duration = 2, init = False):
         ''' broadcast an FMCW chirp ranging from low_freq
         to high_freq, spanning duration seconds 
         freq at time t is given by (low_freq * (duration - t) + high_freq * t) / duration
-        signal is given by sin (2 pi * freq * t)'''
+        signal is given by sin (2 pi * freq * t)
+        if init, store the full sweep values in self.fmcw_sweep'''
         cur_frame = 0
-        while cur_frame < duration * self.fs and not self.terminate:
+        if init: self.fmcw_sweep = []
+        while cur_frame < int(duration * self.fs) and (init or not self.terminate):
             # number of frames to produce on this iteration
-            num_frames = self.output_stream.get_write_available()
+            if init:
+                num_frames = self.chunk
+            else:
+                num_frames = self.output_stream.get_write_available()
             times = np.arange(cur_frame, cur_frame + num_frames) / self.fs
             freq = (low_freq * (duration - times) + high_freq * times) / duration
-            arg = np.pi * 2 * np.multiply(freq, times)
-            signal = self.amp * np.sin(arg)
-            signal = signal.astype(np.float32)
-            self.output_stream.write(signal.tobytes())
+            if init:
+                self.fmcw_sweep = np.concatenate((self.fmcw_sweep, freq))
+            else:  # format output
+                arg = np.pi * 2 * np.multiply(freq, times)
+                signal = self.amp * np.sin(arg)
+                # necessary data type conversions (output is static otherwise)
+                signal = signal.astype(np.float32)
+                self.output_stream.write(signal.tobytes())
             cur_frame += num_frames
+
+    def initFMCW(self, low_freq, high_freq, duration):
+        # initialize chirp sweep expected data
+        self.chirp(low_freq, high_freq, duration, True)
+
+    def transmit(self, low_freq, high_freq, duration = 2):
+        ''' continuously broadcast FMCW chirps from low_freq
+        to high_freq spanning duration seconds'''
+        while not self.terminate:
+            self.chirp(low_freq, high_freq, duration)
 
     def play(self, filename):
         # Open the sound file 
