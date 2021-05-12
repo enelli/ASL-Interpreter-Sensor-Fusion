@@ -136,6 +136,7 @@ class SONAR:
             #print(self.last_freq, freq)
             return (self.last_freq - freq) / self.slope
         frames = []
+        prev_window = np.zeros(self.high_ind - self.low_ind)
         total_data = np.zeros(self.high_ind - self.low_ind)
         while not self.terminate:  # continuously read until termination
             num_frames = self.input_stream.get_read_available()
@@ -145,11 +146,14 @@ class SONAR:
                 # fft_data[f] is now the amplitude? of the fth frequency
                 # pass just the FMCW frequencies
                 fft_data = np.abs(np.fft.rfft(frames[:self.chunk]))[self.low_ind:self.high_ind]
-                max_inds = fft_data.argsort()[-4:]  # extract 4 largest frequencies
+                # extract 4 largest changed frequencies
+                max_inds = (fft_data - prev_window).argsort()[-4:]
                 freq = [self.f_vec[i] for i in max_inds]
                 delays = [time_diff(f) for f in freq]
                 #print(delays)
-                total_data += fft_data
+                plt.plot(self.f_vec[self.low_ind:self.high_ind],fft_data)
+                total_data += fft_data - prev_window  # show only the total change
+                prev_window = fft_data
                 frames = frames[self.chunk:]
         plt.plot(self.f_vec[self.low_ind:self.high_ind],total_data)
 
