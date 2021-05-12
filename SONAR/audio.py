@@ -72,4 +72,5 @@ def record(filename):
     wf.writeframes(b''.join(frames))
     wf.close()
 
-play("test.wav")
+# play("test.wav")
+record("output.wav")
