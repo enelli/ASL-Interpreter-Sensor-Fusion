@@ -176,7 +176,7 @@ class SONAR:
 
     # record audio input and write to filename
     def record(self, filename):
-        seconds = 1
+        seconds = 10
         print('Recording')
 
         frames = []  # Initialize array to store frames
@@ -249,4 +249,3 @@ if __name__ == "__main__":
     s.receive()
     #s.subtract_window()
     s.destruct()
-    
