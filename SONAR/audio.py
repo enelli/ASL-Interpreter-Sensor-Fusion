@@ -133,7 +133,6 @@ class SONAR:
             # current broadcast frequency
             if (freq > self.last_freq): freq -= self.bandwidth
             # ensure self.last_freq > freq always
-            #print(self.last_freq, freq)
             return (self.last_freq - freq) / self.slope
         frames = []
         prev_window = np.zeros(self.high_ind - self.low_ind)
@@ -147,11 +146,10 @@ class SONAR:
                 # pass just the FMCW frequencies
                 fft_data = np.abs(np.fft.rfft(frames[:self.chunk]))[self.low_ind:self.high_ind]
                 # extract 4 largest changed frequencies
-                max_inds = (fft_data - prev_window).argsort()[-4:]
+                max_inds = (fft_data - prev_window).argsort()[-4:] + self.low_ind
                 freq = [self.f_vec[i] for i in max_inds]
                 delays = [time_diff(f) for f in freq]
-                #print(delays)
-                plt.plot(self.f_vec[self.low_ind:self.high_ind],fft_data)
+                #plt.plot(self.f_vec[self.low_ind:self.high_ind],fft_data)
                 total_data += fft_data - prev_window  # show only the total change
                 prev_window = fft_data
                 frames = frames[self.chunk:]

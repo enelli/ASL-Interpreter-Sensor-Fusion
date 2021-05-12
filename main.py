@@ -21,8 +21,8 @@ class ASLThread(threading.Thread):
 s = SONAR()
 
 # FMCW chirp setup
-LOW_FREQ = 220
-HIGH_FREQ = 880
+LOW_FREQ = 19220
+HIGH_FREQ = 19880
 DURATION = 2  # seconds
 s.init_fmcw(LOW_FREQ, HIGH_FREQ, DURATION)
 
