@@ -10,7 +10,6 @@ SAMPLE_RATE = 44100  # default audio sample rate
 # dimensions of the threshold array to feed into visual ML
 WIDTH = 300
 HEIGHT = 300
-BUFFER_SIZE = 2048
 SOUND_SPEED = 343
 THRESH = 1  # FFT threshold to filter out noise
 
@@ -19,7 +18,7 @@ class SONAR:
     def __init__(self, samp = SAMPLE_RATE):
         # audio parameters setup
         self.fs = samp  # audio sample rate
-        self.chunk = BUFFER_SIZE
+        self.chunk = 1024
         self.p = pyaudio.PyAudio()
         self.num_channels = 1  # use mono output for now
         self.format = pyaudio.paFloat32
@@ -44,55 +43,84 @@ class SONAR:
         # allow other threads to abort this one
         self.terminate = False
 
-        # fft frequency window, will be clipped to readable frequencies
+        # fft frequency window
+        # will be trimmed to FMCW frequencies
         self.f_vec = self.fs * np.arange(self.chunk)/self.chunk 
-        # set indices on frequency range
-        self.low_ind = 0
-        self.high_ind = 0
+
+        # FMCW params
+        self.last_freq = 0  # last frequency broadcasted
+        self.slope = 0  # FMCW slope
+        self.bandwidth = 0  # sweep range
+        self.low_ind = 0  # filter out frequencies below f_vec[low_ind]
+        self.high_ind = 0  # filter out frequencies above f_vec[high_ind]
 
         self.amp = 0.8  # amplitude for signal sending
-        self.freq = 0  # store transmitted frequency
-        self.last_transmit = 0  # time when last transmission began
+
+        self.time = 0
 
     # allow camera thread to terminate audio threads
     def abort(self):
         self.terminate = True
                                 
-    def set_freq_range(self, low_freq, high_freq):
-        self.low_ind = int(low_freq * self.chunk / self.fs)
-        self.high_ind = int(high_freq * self.chunk / self.fs)
-        self.f_vec = self.f_vec[self.low_ind:self.high_ind]
 
     # play a tone at frequency freq for a given duration
     def play_freq(self, freq, duration = 1):
-        self.freq = freq
         cur_frame = 0
-        reset_transmit = True
+        self.last_freq = freq
         # signal: sin (2 pi * freq * time)
         while cur_frame < duration * self.fs and not self.terminate:
         #while not self.terminate:
             # number of frames to produce on this iteration
             num_frames = self.output_stream.get_write_available()
             times = np.arange(cur_frame, cur_frame + num_frames) / self.fs
-            arg = times * 2 * np.pi * freq
+            times = times * 2 * np.pi * freq
             # account for amplitude adjustments
-            signal = self.amp * np.sin(arg)
+            signal = self.amp * np.sin(times)
             signal = signal.astype(np.float32)
-            # log start of signal transmit as accurately as possible
-            if reset_transmit:
-                reset_transmit = False
-                self.last_transmit = time.time()
             self.output_stream.write(signal.tobytes())
+            self.time = time.time()
             cur_frame += num_frames
 
-    # periodically transmit a constant frequency signal every interval seconds
-    def transmit(self, freq, interval):
-        signal_length = 0.3
-        max_chirps = 5
-        while not self.terminate and max_chirps > 0:
-            self.play_freq(freq, signal_length)
-            time.sleep(interval - signal_length)
-            max_chirps -= 1
+    def chirp(self, low_freq, high_freq, duration = 2):
+        ''' broadcast an FMCW chirp ranging from low_freq
+        to high_freq, spanning duration seconds 
+        freq at time t is given by (low_freq * (duration - t) + high_freq * t) / duration
+        signal is given by sin (2 pi * freq * t)'''
+        cur_frame = 0
+        ending_frame = duration * self.fs
+        while cur_frame < ending_frame and not self.terminate:
+            # number of frames to produce on this iteration
+            num_frames = self.output_stream.get_write_available()
+            # never go beyond ending_frame
+            num_frames = min(num_frames, ending_frame - cur_frame)
+            if num_frames:
+                times = np.arange(cur_frame, cur_frame + num_frames) / self.fs
+                freq = (low_freq * (duration - times) + high_freq * times) / duration
+                arg = np.pi * 2 * np.multiply(freq, times)
+                signal = self.amp * np.sin(arg)
+                # necessary data type conversions (output is static otherwise)
+                signal = signal.astype(np.float32)
+                self.output_stream.write(signal.tobytes())
+                cur_frame += num_frames
+                self.last_freq = freq[-1]  # store most recent frequency as the current freq
+    
+    def init_fmcw(self, low_freq, high_freq, duration):
+        ''' initialize slope and last_freq for fmcw'''
+        self.bandwidth = high_freq - low_freq
+        self.slope = self.bandwidth / duration
+        self.last_freq = low_freq
+        # filters for FMCW frequencies
+        self.low_ind = int(low_freq * self.chunk / self.fs)
+        self.high_ind = int(high_freq * self.chunk / self.fs)
+        self.f_vec = self.f_vec[self.low_ind:self.high_ind]
+
+    def transmit(self, low_freq, high_freq, duration = 2):
+        ''' continuously broadcast FMCW chirps from low_freq
+        to high_freq spanning duration seconds'''
+        while not self.terminate:
+            self.play_freq((low_freq + high_freq)/2, 0.1)
+            time.sleep(duration)
+            #self.chirp(low_freq, high_freq, duration)
 
     def play(self, filename):
         # Open the sound file 
@@ -112,39 +140,56 @@ class SONAR:
 
         wf.close()
 
-    # detect time it takes for short signal to reach mic
-    def receive_burst(self):
+    # receive and process audio input
+    def receive(self):
+        def time_diff(freq):
+            # given a frequency, determine time offset relative to
+            # current broadcast frequency
+            if (freq > self.last_freq): freq -= self.bandwidth
+            # ensure self.last_freq > freq always
+            return (self.last_freq - freq) / self.slope
         frames = []
-        end_ind = int(self.chunk/2)
-        timer = time.time()
-        receive_time = time.time()
-        while not self.terminate and time.time() - timer < 10:  # continuously read until termination
+        prev_window = np.zeros(self.high_ind - self.low_ind)
+        while not self.terminate:  # continuously read until termination
             num_frames = self.input_stream.get_read_available()
             input_signal = np.frombuffer(self.input_stream.read(num_frames, exception_on_overflow=False), dtype=np.float32)
             frames = np.concatenate((frames, input_signal))
-            # wait until we have a full chunk before processing; is this a good idea?
             if len(frames) >= self.chunk:  # wait until we have a full chunk before processing
-                # fft_data[f] is now the amplitude? of the fth frequency (first two values are garbage)
+                # fft_data[f] is now the amplitude? of the fth frequency
+                # pass just the FMCW frequencies
                 fft_data = np.abs(np.fft.rfft(frames[:self.chunk]))[self.low_ind:self.high_ind]
-                receive_time = time.time()
-                if (len(frames) < 1.5 * self.chunk):  # do not draw every time
-                    plt.plot(self.f_vec, fft_data)
-                    plt.draw()
-                    plt.pause(1e-6)
-                    plt.clf()
-                frames = frames[self.chunk:]  # clear frames already read
-                # extract approximate index of the frequency we're looking for
-                #ind = self.freq * self.chunk / self.fs
-                #cur_signal = fft_data[ind - 1] + fft_data[ind] + fft_data[ind + 1]
+                # filter out insignificant parts
+                fft_data = np.where(fft_data < THRESH, 0, fft_data)
+                # extract fundamental frequency
+                #max_ind = fft_data.argmax()
+                #freq = self.f_vec[max_ind]
+                #if abs(freq - self.last_freq) < 100:
+                #    time_diff = time.time() - self.time
+                #    self.last_freq = 0  # already read
+                #    print("time diff:", time_diff)
+                # compute time diff
+                #last_freq = self.last_freq  # store to avoid changing this value mid-computation
+                #time_diff = np.where(self.f_vec > last_freq, \
+                #    last_freq + self.bandwidth - self.f_vec, last_freq - self.f_vec) / self.slope
+                #distance = SOUND_SPEED * time_diff
+                ## extract 4 largest frequencies
+                ##max_inds = fft_data.argsort()[-4:]
+                ##freq = [self.f_vec[i] for i in max_inds]
+                ##delays = [time_diff(f) for f in freq]
+                ## for more sensible plot, start drawing from max distance
+                #split = np.argmax(distance)
+                #wrapped_distance = np.concatenate((distance[split:],distance[:split]))
+                #wrapped_data = np.concatenate((fft_data[split:],fft_data[:split]))
+                ## ideally maps distances to intensity
+                #plt.plot(wrapped_distance, wrapped_data - prev_window)
+                plt.plot(self.f_vec,fft_data)
+                ##plt.plot(self.f_vec,time_diff)  # valley at current freq
+                plt.draw()
+                plt.pause(0.0000001)
+                plt.clf()
+                #prev_window = wrapped_data
+                frames = []  # completely clear window
 
-
-
-    # process audio input
-    def process(self):
-        while not self.terminate:
-            pass
-            
-            
     # record audio input and write to filename
     def record(self, filename):
         seconds = 10
@@ -193,6 +238,19 @@ class SONAR:
         plt.plot(self.f_vec, fft_subtract)
         plt.show()
 
+    def match(self, signal):
+        ''' given an input signal of frequencies, match them
+        to self.fmcw_sweep and return the index of the most similar
+        segment '''
+        pass
+
+    def find_hand(self):
+        ''' return a WIDTH x HEIGHT binary determination of 0s and 255s
+        representing where the hand is, with (0,0) representing the top 
+        left of the screen'''
+        return np.zeros((WIDTH, HEIGHT), dtype=np.uint8)
+        
+
     # close all streams and terminate PortAudio interface
     def destruct(self):
         self.output_stream.close()
@@ -200,8 +258,12 @@ class SONAR:
         self.p.terminate()
 
 if __name__ == "__main__":
+    plt.ion()
+    plt.show()
     s = SONAR()
-    s.set_freq_range(220, 1760)
-    #s.transmit(440, 2)
-    s.receive_burst()
+    #s.chirp(220, 880, 5)
+    #s.play_freq(440, 10)
+    s.init_fmcw(200, 800, 5)
+    s.receive()
+    #s.subtract_window()
     s.destruct()
