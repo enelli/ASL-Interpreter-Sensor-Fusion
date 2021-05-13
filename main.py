@@ -1,5 +1,4 @@
 import sys
-from Visual.final import recognize
 from SONAR.audio import SONAR
 
 import numpy as np
@@ -8,6 +7,11 @@ import matplotlib.pyplot as plt
 import threading
 
 matplotlib.use('TkAgg')
+
+# determine whether this device is transmitter or receiver
+TRANSMITTER = (len(sys.argv) >= 2 and sys.argv[1] == '-t')
+if not TRANSMITTER:
+    from Visual.final import recognize
 
 # create separate threads for video and SONAR
 class ASLThread(threading.Thread):
@@ -18,9 +22,6 @@ class ASLThread(threading.Thread):
 
     def run(self):
         self.func()
-
-# determine whether this device is transmitter or receiver
-TRANSMITTER = (len(sys.argv) >= 2 and sys.argv[1] == '-t')
 
 # create audio object
 s = SONAR()
@@ -50,12 +51,12 @@ if not TRANSMITTER:
     # handle receiver thread in main
     s.receive_burst()
 else:
-    while not s.terminate:
+    try:
+        while not s.terminate:
         # TODO: do something better than this
-        try:
             pass
-        except KeyboardInterrupt:
-            s.abort()
+    except KeyboardInterrupt:
+        s.abort()
 
 for thread in threads:
     thread.join()
