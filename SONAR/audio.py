@@ -13,7 +13,7 @@ HEIGHT = 300
 BUFFER_SIZE = 2048
 SOUND_SPEED = 343
 THRESH = 1  # FFT threshold to filter out noise
-ENABLE_DRAW = True  # whether to plot data
+ENABLE_DRAW = False  # whether to plot data
 
 class SONAR:
     ''' detect hand positions through SONAR '''
@@ -52,8 +52,8 @@ class SONAR:
         self.high_ind = 0
 
         self.amp = 0.8  # amplitude for signal sending
-        self.freq = 0  # store transmitted frequency
-        self.last_transmit = 0  # time when last transmission began
+
+        self.movement_detected = False  # whether there is current motion
 
     # allow camera thread to terminate audio threads
     def abort(self):
@@ -66,9 +66,7 @@ class SONAR:
 
     # continuously play a tone at frequency freq
     def play_freq(self, freq):
-        self.freq = freq
         cur_frame = 0
-        reset_transmit = True
         # signal: sin (2 pi * freq * time)
         while not self.terminate:
             # number of frames to produce on this iteration
@@ -79,9 +77,6 @@ class SONAR:
             signal = self.amp * np.sin(arg)
             signal = signal.astype(np.float32)
             # log start of signal transmit as accurately as possible
-            if reset_transmit:
-                reset_transmit = False
-                self.last_transmit = time.time()
             self.output_stream.write(signal.tobytes())
             cur_frame += num_frames
 
@@ -114,8 +109,8 @@ class SONAR:
     # detect time it takes for short signal to reach mic
     def receive_burst(self):
         frames = []
-        last_start = self.last_transmit
         prev_window = np.zeros(self.high_ind - self.low_ind)
+        num_moves = 0  # number of consecutive windows with movement
         while not self.terminate:
             num_frames = self.input_stream.get_read_available()
             input_signal = np.frombuffer(self.input_stream.read(num_frames, exception_on_overflow=False), dtype=np.float32)
@@ -126,12 +121,18 @@ class SONAR:
                 # fft_data[f] is now the amplitude? of the fth frequency (first two values are garbage)
                 fft_data = np.abs(np.fft.rfft(frames[:self.chunk]))[self.low_ind:self.high_ind]
                 # filter out low amplitudes
-                fft_data = np.where(fft_data < 2 * THRESH, 0, fft_data)
+                fft_data = np.where(fft_data < THRESH, 0, fft_data)
                 diff = np.abs(fft_data - prev_window)
-                diff = np.where(diff < THRESH, 0, diff)
+                diff = np.where(diff < 2 * THRESH, 0, diff)
                 # filter out single frequency peaks (these tend to be noise)
-                if np.count_nonzero(diff) == 1:
-                    diff = np.zeros(len(diff))
+                if np.count_nonzero(diff) > 1:
+                    num_moves += 1
+                    if num_moves > 1: self.movement_detected = True
+                elif num_moves > 0:
+                    if num_moves > 1:
+                        self.movement_detected = False
+                        print("Movement ended", num_moves)
+                    num_moves = 0
                 # assuming near-ultrasound, the extracted frequency should be approximately the transmitted one
                 #amp = max(fft_data)
                 if ENABLE_DRAW and (len(frames) < 1.5 * self.chunk):  # do not draw every time
@@ -142,12 +143,8 @@ class SONAR:
                 frames = frames[self.chunk:]  # clear frames already read
                 prev_window = fft_data
 
-
-    # process audio input
-    def process(self):
-        while not self.terminate:
-            pass
-            
+    def is_moving(self):
+        return self.movement_detected
             
     # record audio input and write to filename
     def record(self, filename):

@@ -9,9 +9,9 @@ import threading
 matplotlib.use('TkAgg')
 
 # determine whether this device is transmitter or receiver
-TRANSMITTER = (len(sys.argv) >= 2 and sys.argv[1] == '-t')
-if not TRANSMITTER:
-    from Visual.final import recognize
+#TRANSMITTER = (len(sys.argv) >= 2 and sys.argv[1] == '-t')
+#if not TRANSMITTER:
+from Visual.final import recognize
 
 # create separate threads for video and SONAR
 class ASLThread(threading.Thread):
@@ -35,28 +35,18 @@ s.set_freq_range(LOW_FREQ, HIGH_FREQ)
 
 # create concurrent threads for each object
 threads = []
-if not TRANSMITTER:
-    # camera thread
-    threads.append(ASLThread(1, lambda: recognize(s.abort)))
-    plt.ion()
-    plt.show()
-else:
-    # transmitter thread
-    threads.append(ASLThread(2, lambda: s.play_freq(TRANSMIT_FREQ)))
+# camera thread
+threads.append(ASLThread(1, lambda: recognize(s.abort)))
+# transmitter thread
+threads.append(ASLThread(2, lambda: s.play_freq(TRANSMIT_FREQ)))
+
+plt.ion()
+plt.show()
 
 for thread in threads:
     thread.start()
 
-if not TRANSMITTER:
-    # handle receiver thread in main
-    s.receive_burst()
-else:
-    try:
-        while not s.terminate:
-        # TODO: do something better than this
-            pass
-    except KeyboardInterrupt:
-        s.abort()
+s.receive_burst()
 
 for thread in threads:
     thread.join()
