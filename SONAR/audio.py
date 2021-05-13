@@ -115,6 +115,7 @@ class SONAR:
     def receive_burst(self):
         frames = []
         last_start = self.last_transmit
+        prev_window = np.zeros(self.high_ind - self.low_ind)
         while not self.terminate:
             num_frames = self.input_stream.get_read_available()
             input_signal = np.frombuffer(self.input_stream.read(num_frames, exception_on_overflow=False), dtype=np.float32)
@@ -125,15 +126,21 @@ class SONAR:
                 # fft_data[f] is now the amplitude? of the fth frequency (first two values are garbage)
                 fft_data = np.abs(np.fft.rfft(frames[:self.chunk]))[self.low_ind:self.high_ind]
                 # filter out low amplitudes
-                fft_data = np.where(fft_data < THRESH, 0, fft_data)
+                fft_data = np.where(fft_data < 2 * THRESH, 0, fft_data)
+                diff = np.abs(fft_data - prev_window)
+                diff = np.where(diff < THRESH, 0, diff)
+                # filter out single frequency peaks (these tend to be noise)
+                if np.count_nonzero(diff) == 1:
+                    diff = np.zeros(len(diff))
                 # assuming near-ultrasound, the extracted frequency should be approximately the transmitted one
                 #amp = max(fft_data)
                 if ENABLE_DRAW and (len(frames) < 1.5 * self.chunk):  # do not draw every time
-                    plt.plot(self.f_vec, fft_data)
+                    plt.plot(self.f_vec, diff)
                     plt.draw()
                     plt.pause(1e-6)
                     plt.clf()
                 frames = frames[self.chunk:]  # clear frames already read
+                prev_window = fft_data
 
 
     # process audio input
