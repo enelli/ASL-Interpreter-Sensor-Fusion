@@ -131,7 +131,7 @@ class SONAR:
                 elif num_moves > 0:
                     if num_moves > 1:
                         self.movement_detected = False
-                        print("Movement ended", num_moves)
+                        #print("Movement ended", num_moves)
                     num_moves = 0
                 # assuming near-ultrasound, the extracted frequency should be approximately the transmitted one
                 #amp = max(fft_data)

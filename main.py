@@ -23,6 +23,13 @@ class ASLThread(threading.Thread):
     def run(self):
         self.func()
 
+def detect_movement(s):
+    count = 0
+    while not s.terminate:
+        if s.is_moving():
+            print("Moving!", count)
+            count += 1
+
 # create audio object
 s = SONAR()
 
@@ -39,6 +46,7 @@ threads = []
 threads.append(ASLThread(1, lambda: recognize(s.abort)))
 # transmitter thread
 threads.append(ASLThread(2, lambda: s.play_freq(TRANSMIT_FREQ)))
+threads.append(ASLThread(3, lambda: detect_movement(s)))
 
 plt.ion()
 plt.show()
