@@ -64,14 +64,13 @@ class SONAR:
         self.high_ind = int(high_freq * self.chunk / self.fs)
         self.f_vec = self.f_vec[self.low_ind:self.high_ind]
 
-    # play a tone at frequency freq for a given duration
-    def play_freq(self, freq, duration = 1):
+    # continuously play a tone at frequency freq
+    def play_freq(self, freq):
         self.freq = freq
         cur_frame = 0
         reset_transmit = True
         # signal: sin (2 pi * freq * time)
-        while cur_frame < duration * self.fs and not self.terminate:
-        #while not self.terminate:
+        while not self.terminate:
             # number of frames to produce on this iteration
             num_frames = self.output_stream.get_write_available()
             times = np.arange(cur_frame, cur_frame + num_frames) / self.fs
@@ -129,21 +128,12 @@ class SONAR:
                 fft_data = np.where(fft_data < THRESH, 0, fft_data)
                 # assuming near-ultrasound, the extracted frequency should be approximately the transmitted one
                 #amp = max(fft_data)
-                #if amp > 0:  # frequency detected
-                    #if last_start < self.last_transmit:  # start of new transmission
-                    #    time_diff = np.min(times) - self.last_transmit
-                    #    last_start = self.last_transmit
-                    #print(amp)
                 if ENABLE_DRAW and (len(frames) < 1.5 * self.chunk):  # do not draw every time
                     plt.plot(self.f_vec, fft_data)
                     plt.draw()
                     plt.pause(1e-6)
                     plt.clf()
                 frames = frames[self.chunk:]  # clear frames already read
-                # extract approximate index of the frequency we're looking for
-                #ind = self.freq * self.chunk / self.fs
-                #cur_signal = fft_data[ind - 1] + fft_data[ind] + fft_data[ind + 1]
-
 
 
     # process audio input

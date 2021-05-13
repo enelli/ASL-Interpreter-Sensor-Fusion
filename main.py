@@ -19,6 +19,8 @@ class ASLThread(threading.Thread):
     def run(self):
         self.func()
 
+# determine whether this device is transmitter or receiver
+TRANSMITTER = (len(sys.argv) >= 2 and sys.argv[1] == '-t')
 
 # create audio object
 s = SONAR()
@@ -32,19 +34,28 @@ s.set_freq_range(LOW_FREQ, HIGH_FREQ)
 
 # create concurrent threads for each object
 threads = []
-# camera thread
-threads.append(ASLThread(1, lambda: recognize(s.abort)))
-# transmitter thread
-threads.append(ASLThread(2, lambda: s.transmit(TRANSMIT_FREQ, DURATION)))
-
-plt.ion()
-plt.show()
+if not TRANSMITTER:
+    # camera thread
+    threads.append(ASLThread(1, lambda: recognize(s.abort)))
+    plt.ion()
+    plt.show()
+else:
+    # transmitter thread
+    threads.append(ASLThread(2, lambda: s.play_freq(TRANSMIT_FREQ)))
 
 for thread in threads:
     thread.start()
 
-# handle receiver thread in main
-s.receive_burst()
+if not TRANSMITTER:
+    # handle receiver thread in main
+    s.receive_burst()
+else:
+    while not s.terminate:
+        # TODO: do something better than this
+        try:
+            pass
+        except KeyboardInterrupt:
+            s.abort()
 
 for thread in threads:
     thread.join()
