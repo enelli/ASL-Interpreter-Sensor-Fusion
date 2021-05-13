@@ -13,6 +13,7 @@ HEIGHT = 300
 BUFFER_SIZE = 2048
 SOUND_SPEED = 343
 THRESH = 1  # FFT threshold to filter out noise
+ENABLE_DRAW = True  # whether to plot data
 
 class SONAR:
     ''' detect hand positions through SONAR '''
@@ -87,12 +88,11 @@ class SONAR:
 
     # periodically transmit a constant frequency signal every interval seconds
     def transmit(self, freq, interval):
-        signal_length = 0.3
-        max_chirps = 5
-        while not self.terminate and max_chirps > 0:
+        #signal_length = 0.01  # still detectable
+        signal_length = 2
+        while not self.terminate:
             self.play_freq(freq, signal_length)
             time.sleep(interval - signal_length)
-            max_chirps -= 1
 
     def play(self, filename):
         # Open the sound file 
@@ -115,19 +115,26 @@ class SONAR:
     # detect time it takes for short signal to reach mic
     def receive_burst(self):
         frames = []
-        end_ind = int(self.chunk/2)
-        timer = time.time()
-        receive_time = time.time()
-        while not self.terminate and time.time() - timer < 10:  # continuously read until termination
+        last_start = self.last_transmit
+        while not self.terminate:
             num_frames = self.input_stream.get_read_available()
             input_signal = np.frombuffer(self.input_stream.read(num_frames, exception_on_overflow=False), dtype=np.float32)
-            frames = np.concatenate((frames, input_signal))
+            if len(input_signal) > 0:
+                frames = np.concatenate((frames, input_signal))
             # wait until we have a full chunk before processing; is this a good idea?
             if len(frames) >= self.chunk:  # wait until we have a full chunk before processing
                 # fft_data[f] is now the amplitude? of the fth frequency (first two values are garbage)
                 fft_data = np.abs(np.fft.rfft(frames[:self.chunk]))[self.low_ind:self.high_ind]
-                receive_time = time.time()
-                if (len(frames) < 1.5 * self.chunk):  # do not draw every time
+                # filter out low amplitudes
+                fft_data = np.where(fft_data < THRESH, 0, fft_data)
+                # assuming near-ultrasound, the extracted frequency should be approximately the transmitted one
+                #amp = max(fft_data)
+                #if amp > 0:  # frequency detected
+                    #if last_start < self.last_transmit:  # start of new transmission
+                    #    time_diff = np.min(times) - self.last_transmit
+                    #    last_start = self.last_transmit
+                    #print(amp)
+                if ENABLE_DRAW and (len(frames) < 1.5 * self.chunk):  # do not draw every time
                     plt.plot(self.f_vec, fft_data)
                     plt.draw()
                     plt.pause(1e-6)
