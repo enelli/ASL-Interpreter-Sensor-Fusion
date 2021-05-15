@@ -52,11 +52,10 @@ def detect_signs(sonar):
 
         index = np.argmax(y, axis=1)
         confidence = y[0][index][0]
-
-        print(index_to_letter[int(index)])
-
-        if confidence > THRESHOLD:
+        
+        if confidence > THRESHOLD and not sonar.is_moving():
             current_letter = index_to_letter[int(index)]
+            print(current_letter)
             buffer.append((current_letter, confidence))
             buffer.pop(0)
 
