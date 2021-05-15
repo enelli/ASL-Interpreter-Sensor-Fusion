@@ -14,8 +14,8 @@ sys.path.append(src)
 
 from src.SONAR.audio import SONAR
 
-COUNT = 100
-THRESHOLD = 15
+COUNT = 150
+THRESHOLD = 10
 CONFIDENCE_THRESHOLD = 1
 
 def center_crop(frame):
@@ -57,12 +57,17 @@ def detect_signs(sonar):
         confidence = y[0][index][0]
         current_letter = None
 
+        if sonar.movement_flag and previous_letter == 'J':
+            previous_letter = None
+
+        # propagate buffer
         if confidence > THRESHOLD and not sonar.is_moving():
             current_letter = index_to_letter[int(index)]
-            print(confidence)
             buffer.append((current_letter, confidence))
             buffer.pop(0)
 
+
+        # find average confidences per letter
         average_confidences = {}
 
         for data_item in buffer:
@@ -72,8 +77,8 @@ def detect_signs(sonar):
                 average_confidences[letter] = average_confidences[letter][0] + data_item[1], average_confidences[letter][1] + 1
             else:
                 average_confidences[letter] = data_item[1], 1
-        
-        print(average_confidences)
+
+        # find most confident letter
         best_confidence = CONFIDENCE_THRESHOLD
         best_letter = None
 
@@ -82,28 +87,33 @@ def detect_signs(sonar):
             count_confidence = average_confidences[letter][1]
 
             if (count_confidence > COUNT/len(average_confidences)):
-                average_confidence = sum_confidence/count_confidence + 2 * count_confidence/COUNT
+                # weight average confidence by frequency and average of confidences in buffer
+                average_confidence = sum_confidence/count_confidence + 3 * count_confidence/COUNT
                 if average_confidence > best_confidence:
                     best_letter = letter
                     best_confidence = average_confidence
-                    print(best_letter, best_confidence)
 
-        if best_letter is not None:
+        if previous_letter != 'J':
             letter = best_letter
+        else:
+            letter = 'J'
 
-        if (previous_letter == 'I' and sonar.is_moving()):
+        print(letter, previous_letter, sonar.movement_flag)
+        if (previous_letter == 'I' and sonar.movement_flag):
             letter = 'J'
 
         cv2.putText(frame, letter, (100, 100), cv2.FONT_HERSHEY_SIMPLEX, 2.0, (0, 255, 0), thickness=2)
         cv2.putText(frame, current_letter, (100, 200), cv2.FONT_HERSHEY_SIMPLEX, 2.0, (0, 255, 0), thickness=2)
-        cv2.putText(frame, "Moving: " + str(sonar.movement_detected), (200, 100), cv2.FONT_HERSHEY_SIMPLEX, 2.0, (0, 255, 0), thickness=2)
         cv2.imshow("Sign Language Translator", frame)
 
-        previous_letter = letter
+        if previous_letter != letter:
+            previous_letter = letter
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
             sonar.destruct()
             break
+
+        sonar.movement_flag = False
 
     cap.release()
     cv2.destroyAllWindows()

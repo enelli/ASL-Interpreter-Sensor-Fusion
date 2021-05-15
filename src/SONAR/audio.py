@@ -56,6 +56,7 @@ class SONAR:
 
         self.amp = 0.8  # amplitude for signal sending
 
+        self.movement_flag = False
         self.movement_detected = False  # whether there is current motion
 
     # allow camera thread to terminate audio threads
@@ -135,6 +136,7 @@ class SONAR:
                 elif num_moves > 0:
                     if num_moves > 1:
                         self.movement_detected = False
+                        self.movement_flag = True
                         print("Movement ended", num_moves)
                     num_moves = 0
                 # assuming near-ultrasound, the extracted frequency should be approximately the transmitted one
@@ -218,6 +220,6 @@ class SONAR:
         self.destruct()
 if __name__ == "__main__":
     s = SONAR()
-    Thread(target=lambda:s.play_freq(440)).start()
-    s.set_freq_range(220, 1760)
+    Thread(target=lambda:s.play_freq(19000)).start()
+    s.set_freq_range(18000, 20000)
     s.receive_burst()

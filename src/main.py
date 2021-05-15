@@ -34,12 +34,11 @@ class ASLThread(threading.Thread):
 s = SONAR()
 
 # audio configuration
-LOW_FREQ = 220
-HIGH_FREQ = 1760
+LOW_FREQ = 18000
+HIGH_FREQ = 20000
 TRANSMIT_FREQ = (LOW_FREQ + HIGH_FREQ) / 2
-DURATION = 5  # seconds
 
-s.set_freq_range(220, 20000)
+s.set_freq_range(LOW_FREQ, HIGH_FREQ)
 
 # create concurrent threads for each object
 threads = []
@@ -48,7 +47,7 @@ threads = []
 # transmitter thread
 # threads.append(ASLThread(2, lambda: s.play_freq(440)))
 # receiver thread
-threads.append(ASLThread(2, lambda: s.play_freq(19440)))
+threads.append(ASLThread(2, lambda: s.play_freq(TRANSMIT_FREQ)))
 threads.append(ASLThread(3, s.receive_burst))
 
 plt.ion()
