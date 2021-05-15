@@ -15,7 +15,7 @@ sys.path.append(src)
 from src.SONAR.audio import SONAR
 
 COUNT = 300
-THRESHOLD = 10
+THRESHOLD = 0
 
 def center_crop(frame):
     h, w, _ = frame.shape
@@ -83,10 +83,11 @@ def detect_signs(sonar):
                 if average_confidence > best_confidence:
                     best_letter = letter
                     best_confidence = average_confidence
+                    print(best_letter, best_confidence)
 
         letter = best_letter
 
-        if (previous_letter == 'I' and letter is None):
+        if (previous_letter == 'I' and sonar.is_moving()):
             letter = 'J'
 
         cv2.putText(frame, letter, (100, 100), cv2.FONT_HERSHEY_SIMPLEX, 2.0, (0, 255, 0), thickness=2)
