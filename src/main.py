@@ -2,6 +2,7 @@ import sys
 import os
 
 path = os.path.dirname(os.path.realpath(__file__))
+path = "/".join(path.split('/')[:-1])
 sys.path.append(path) 
 
 from src.SONAR.audio import SONAR
