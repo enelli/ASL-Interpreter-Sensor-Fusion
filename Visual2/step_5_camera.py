@@ -37,6 +37,8 @@ def main():
         index = np.argmax(y, axis=1)
         letter = index_to_letter[int(index)]
 
+        # mirror output
+        frame = cv2.flip(frame, 1)
         cv2.putText(frame, letter, (100, 100), cv2.FONT_HERSHEY_SIMPLEX, 2.0, (0, 255, 0), thickness=2)
         cv2.imshow("Sign Language Translator", frame)
 
