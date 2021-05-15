@@ -35,9 +35,6 @@ def detect_signs(sonar):
 
     # create runnable session with exported model
     ort_session = ort.InferenceSession(path + "/signlanguage.onnx")
-
-    letters = [None, None]
-
     cap = cv2.VideoCapture(0)
     
     while True:
@@ -55,6 +52,8 @@ def detect_signs(sonar):
 
         index = np.argmax(y, axis=1)
         confidence = y[0][index][0]
+
+        print(index_to_letter[int(index)])
 
         if confidence > THRESHOLD:
             current_letter = index_to_letter[int(index)]
@@ -80,19 +79,18 @@ def detect_signs(sonar):
             count_confidence = average_confidences[letter][1]
 
             if (count_confidence > COUNT/len(average_confidences)):
-                average_confidence = sum_confidence/count_confidence
+                average_confidence = sum_confidence/count_confidence + count_confidence/COUNT
                 if average_confidence > best_confidence:
                     best_letter = letter
                     best_confidence = average_confidence
 
         letter = best_letter
 
-        print(best_letter)
-
         if (previous_letter == 'I' and letter is None):
             letter = 'J'
 
         cv2.putText(frame, letter, (100, 100), cv2.FONT_HERSHEY_SIMPLEX, 2.0, (0, 255, 0), thickness=2)
+        cv2.putText(frame, index_to_letter[int(index)], (100, 200), cv2.FONT_HERSHEY_SIMPLEX, 2.0, (0, 255, 0), thickness=2)
         cv2.putText(frame, "Moving: " + str(sonar.movement_detected), (200, 100), cv2.FONT_HERSHEY_SIMPLEX, 2.0, (0, 255, 0), thickness=2)
         cv2.imshow("Sign Language Translator", frame)
 
