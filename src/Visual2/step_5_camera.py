@@ -46,13 +46,13 @@ def detect_signs(sonar):
         frame = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
         x = cv2.resize(frame, (28, 28))
         x = (x - mean) / std
-
+        print("HI")
         x = x.reshape(1, 1, 28, 28).astype(np.float32)
         y = ort_session.run(None, {'input': x})[0]      
 
         index = np.argmax(y, axis=1)
         confidence = y[0][index][0]
-        
+
         if confidence > THRESHOLD and not sonar.is_moving():
             current_letter = index_to_letter[int(index)]
             print(current_letter)
