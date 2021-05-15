@@ -14,8 +14,9 @@ sys.path.append(src)
 
 from src.SONAR.audio import SONAR
 
-COUNT = 300
-THRESHOLD = 0
+COUNT = 100
+THRESHOLD = 15
+CONFIDENCE_THRESHOLD = 1
 
 def center_crop(frame):
     h, w, _ = frame.shape
@@ -46,16 +47,19 @@ def detect_signs(sonar):
         frame = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
         x = cv2.resize(frame, (28, 28))
         x = (x - mean) / std
-        print("HI")
+
         x = x.reshape(1, 1, 28, 28).astype(np.float32)
         y = ort_session.run(None, {'input': x})[0]      
 
+        y[0][8] += 10
+
         index = np.argmax(y, axis=1)
         confidence = y[0][index][0]
+        current_letter = None
 
         if confidence > THRESHOLD and not sonar.is_moving():
             current_letter = index_to_letter[int(index)]
-            print(current_letter)
+            print(confidence)
             buffer.append((current_letter, confidence))
             buffer.pop(0)
 
@@ -70,7 +74,7 @@ def detect_signs(sonar):
                 average_confidences[letter] = data_item[1], 1
         
         print(average_confidences)
-        best_confidence = 0
+        best_confidence = CONFIDENCE_THRESHOLD
         best_letter = None
 
         for letter in average_confidences:
@@ -78,19 +82,20 @@ def detect_signs(sonar):
             count_confidence = average_confidences[letter][1]
 
             if (count_confidence > COUNT/len(average_confidences)):
-                average_confidence = sum_confidence/count_confidence + count_confidence/COUNT
+                average_confidence = sum_confidence/count_confidence + 2 * count_confidence/COUNT
                 if average_confidence > best_confidence:
                     best_letter = letter
                     best_confidence = average_confidence
                     print(best_letter, best_confidence)
 
-        letter = best_letter
+        if best_letter is not None:
+            letter = best_letter
 
         if (previous_letter == 'I' and sonar.is_moving()):
             letter = 'J'
 
         cv2.putText(frame, letter, (100, 100), cv2.FONT_HERSHEY_SIMPLEX, 2.0, (0, 255, 0), thickness=2)
-        cv2.putText(frame, index_to_letter[int(index)], (100, 200), cv2.FONT_HERSHEY_SIMPLEX, 2.0, (0, 255, 0), thickness=2)
+        cv2.putText(frame, current_letter, (100, 200), cv2.FONT_HERSHEY_SIMPLEX, 2.0, (0, 255, 0), thickness=2)
         cv2.putText(frame, "Moving: " + str(sonar.movement_detected), (200, 100), cv2.FONT_HERSHEY_SIMPLEX, 2.0, (0, 255, 0), thickness=2)
         cv2.imshow("Sign Language Translator", frame)
 

@@ -1,5 +1,8 @@
 import sys
-sys.path.append('/Users/ellenwang/Desktop/Sign-Language-Interpreter-using-Deep-Learning') 
+import os
+
+path = os.path.dirname(os.path.realpath(__file__))
+sys.path.append(path) 
 
 from src.SONAR.audio import SONAR
 from src.Visual2.step_5_camera import detect_signs
