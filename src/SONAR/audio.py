@@ -15,7 +15,7 @@ HEIGHT = 300
 BUFFER_SIZE = 2048
 SOUND_SPEED = 343
 THRESH = 1  # FFT threshold to filter out noise
-CONSECUTIVE_FRAMES = 8
+CONSECUTIVE_FRAMES = 2
 ENABLE_DRAW = False  # whether to plot data
 
 class SONAR:
@@ -114,7 +114,10 @@ class SONAR:
     def receive_burst(self):
         frames = []
         prev_window = np.zeros(self.high_ind - self.low_ind)
+
         num_moves = 0  # number of consecutive windows with movement
+        num_stall = 0  # number of consecutive windows without movement
+
         while not self.terminate:
             num_frames = self.input_stream.get_read_available()
             input_signal = np.frombuffer(self.input_stream.read(num_frames, exception_on_overflow=False), dtype=np.float32)
@@ -132,13 +135,16 @@ class SONAR:
                 # filter out single frequency peaks (these tend to be noise)
                 if np.count_nonzero(diff) > 1:
                     num_moves += 1
-                    if num_moves > CONSECUTIVE_FRAMES: self.movement_detected = True
+                    if num_moves > 1: self.movement_detected = True
                 elif num_moves > 0:
                     if num_moves > 1:
+                        num_stall += 1
+                    if num_stall > CONSECUTIVE_FRAMES:
                         self.movement_detected = False
                         self.movement_flag = True
                         print("Movement ended", num_moves)
-                    num_moves = 0
+                        num_moves = 0
+
                 # assuming near-ultrasound, the extracted frequency should be approximately the transmitted one
                 #amp = max(fft_data)
                 if ENABLE_DRAW and (len(frames) < 1.5 * self.chunk):  # do not draw every time

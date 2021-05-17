@@ -41,6 +41,7 @@ def detect_signs(sonar):
     while True:
         # Capture frame-by-frame
         ret, frame = cap.read()
+        potential_j = False
 
         # preprocess data
         frame = center_crop(frame)
@@ -61,11 +62,14 @@ def detect_signs(sonar):
             previous_letter = None
 
         # propagate buffer
-        if confidence > THRESHOLD and not sonar.is_moving():
-            current_letter = index_to_letter[int(index)]
-            buffer.append((current_letter, confidence))
-            buffer.pop(0)
+        if not sonar.movement_flag:
+            if confidence > THRESHOLD:
+                current_letter = index_to_letter[int(index)]
+                buffer.append((current_letter, confidence))
+            else:
+                buffer.append((None, 1-confidence))
 
+            buffer.pop(0)  
 
         # find average confidences per letter
         average_confidences = {}
@@ -98,12 +102,10 @@ def detect_signs(sonar):
         else:
             letter = 'J'
 
-        print(letter, previous_letter, sonar.movement_flag)
-        if (previous_letter == 'I' and sonar.movement_flag):
+        print(letter, current_letter, previous_letter, sonar.movement_flag)
+        if  previous_letter == 'I' and current_letter in ['H', None] and sonar.movement_flag:
             letter = 'J'
 
-        # mirror
-        frame = cv2.flip(frame, 1)
         cv2.putText(frame, letter, (100, 100), cv2.FONT_HERSHEY_SIMPLEX, 2.0, (0, 255, 0), thickness=2)
         cv2.putText(frame, current_letter, (100, 200), cv2.FONT_HERSHEY_SIMPLEX, 2.0, (0, 255, 0), thickness=2)
         cv2.imshow("Sign Language Translator", frame)
@@ -112,7 +114,6 @@ def detect_signs(sonar):
             previous_letter = letter
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
-            sonar.abort()
             sonar.destruct()
             break
 
