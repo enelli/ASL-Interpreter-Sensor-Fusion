@@ -102,10 +102,12 @@ def detect_signs(sonar):
         else:
             letter = 'J'
 
-        print(letter, current_letter, previous_letter, sonar.movement_flag)
+        #print(letter, current_letter, previous_letter, sonar.movement_flag)
         if  previous_letter == 'I' and current_letter in ['H', None] and sonar.movement_flag:
             letter = 'J'
 
+        # mirror
+        frame = cv2.flip(frame, 1)
         cv2.putText(frame, letter, (100, 100), cv2.FONT_HERSHEY_SIMPLEX, 2.0, (0, 255, 0), thickness=2)
         cv2.putText(frame, current_letter, (100, 200), cv2.FONT_HERSHEY_SIMPLEX, 2.0, (0, 255, 0), thickness=2)
         cv2.imshow("Sign Language Translator", frame)
@@ -114,7 +116,7 @@ def detect_signs(sonar):
             previous_letter = letter
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
-            sonar.destruct()
+            sonar.abort()
             break
 
         sonar.movement_flag = False

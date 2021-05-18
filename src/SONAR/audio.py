@@ -15,7 +15,7 @@ HEIGHT = 300
 BUFFER_SIZE = 2048
 SOUND_SPEED = 343
 THRESH = 1  # FFT threshold to filter out noise
-CONSECUTIVE_FRAMES = 2
+STALL_WINDOW_THRESH = 2  # number of stalled windows allowed within a single movement
 ENABLE_DRAW = False  # whether to plot data
 
 class SONAR:
@@ -58,6 +58,7 @@ class SONAR:
 
         self.movement_flag = False
         self.movement_detected = False  # whether there is current motion
+        self.move_count = 0  # most recent count of consecutive movement windows
 
     # allow camera thread to terminate audio threads
     def abort(self):
@@ -133,17 +134,23 @@ class SONAR:
                 diff = np.where(diff < 2 * THRESH, 0, diff)
 
                 # filter out single frequency peaks (these tend to be noise)
-                if np.count_nonzero(diff) > 1:
+                if np.count_nonzero(diff) > 1:  # movement detected
                     num_moves += 1
-                    if num_moves > 1: self.movement_detected = True
-                elif num_moves > 0:
-                    if num_moves > 1:
-                        num_stall += 1
-                    if num_stall > CONSECUTIVE_FRAMES:
+                    self.movement_detected = True
+                    num_stall = 0
+                elif num_moves > 0:  # movement may have stopped
+                    if num_stall < STALL_WINDOW_THRESH:
+                        # allow one window of stopped movement
+                        num_moves += 1
+                    else:  # movement has stopped
                         self.movement_detected = False
                         self.movement_flag = True
                         print("Movement ended", num_moves)
+                        # avoid trailing movement overwriting unread existing count
+                        if num_moves > self.move_count:
+                            self.move_count = num_moves
                         num_moves = 0
+                    num_stall += 1
 
                 # assuming near-ultrasound, the extracted frequency should be approximately the transmitted one
                 #amp = max(fft_data)
@@ -158,6 +165,12 @@ class SONAR:
 
     def is_moving(self):
         return self.movement_detected
+
+    # read the most recent movement window count (0 if not moving)
+    def read_move_count(self):
+        count = self.move_count
+        self.move_count = 0
+        return count
             
     # record audio input and write to filename
     def record(self, filename):

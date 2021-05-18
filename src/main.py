@@ -48,7 +48,7 @@ threads = []
 # threads.append(ASLThread(2, lambda: s.play_freq(440)))
 # receiver thread
 threads.append(ASLThread(2, lambda: s.play_freq(TRANSMIT_FREQ)))
-threads.append(ASLThread(3, s.receive_burst))
+threads.append(ASLThread(3, lambda: detect_signs(s)))
 
 plt.ion()
 plt.show()
@@ -56,7 +56,7 @@ plt.show()
 for thread in threads:
     thread.start()
 
-detect_signs(s)
+s.receive_burst()
 
 for thread in threads:
     thread.join()
