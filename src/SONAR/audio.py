@@ -14,9 +14,14 @@ WIDTH = 300
 HEIGHT = 300
 BUFFER_SIZE = 2048
 SOUND_SPEED = 343
-THRESH = 1  # FFT threshold to filter out noise
+THRESH_PROP = 1/38
+THRESH = 1  # FFT threshold to filter out noise, will be THRESH_PROP * base amplitude
 STALL_WINDOW_THRESH = 1  # number of stalled windows allowed within a single movement
 ENABLE_DRAW = False  # whether to plot data
+
+CALIBRATION_WINDOWS = 50  # number of windows to use for calibration
+MIN_ALLOWED_AMP = 10  # minimum volume threshold to account for noise floor
+MOV_AVG_ALPH = 0.2  # weighting factor for calibration average
 
 class SONAR:
     ''' detect hand positions through SONAR '''
@@ -110,6 +115,49 @@ class SONAR:
             data = wf.readframes(self.chunk)
 
         wf.close()
+
+    # calibrate thresholds based on audio volume
+    # also detect if volume is too low/muted
+    # return True if everything is successful
+    def calibrate_thresholds(self, freq):
+        global THRESH  # TODO: don't do this :(
+        # first fork a thread to play the frequency
+        t = Thread(target = lambda: self.play_freq(freq))
+        t.start()
+        # very similar audio reading code to receive_burst
+        cur_win = 0
+        frames = []
+        max_amp = 0
+        success = True
+        while cur_win < CALIBRATION_WINDOWS:
+            num_frames = self.input_stream.get_read_available()
+            input_signal = np.frombuffer(self.input_stream.read(num_frames, exception_on_overflow=False), dtype=np.float32)
+            if len(input_signal) > 0:
+                frames = np.concatenate((frames, input_signal))
+            if len(frames) >= self.chunk:
+                fft_data = np.abs(np.fft.rfft(frames[:self.chunk]))[self.low_ind:self.high_ind]
+                if cur_win == 0:
+                    max_amp = np.max(fft_data)
+                else:
+                    max_amp = max_amp * (1 - MOV_AVG_ALPH) + MOV_AVG_ALPH * np.max(fft_data)
+                if max_amp < MIN_ALLOWED_AMP and cur_win >= 20:
+                    print("Please increase your output volume")
+                    success = False
+                    break
+                if ENABLE_DRAW and len(frames) < 1.5 * self.chunk:
+                    fft_data = np.where(fft_data > THRESH, fft_data, 0)
+                    plt.plot(self.f_vec, fft_data)
+                    plt.draw()
+                    plt.pause(1e-6)
+                    plt.clf()
+                frames = frames[self.chunk:]
+                cur_win += 1
+        self.terminate = True  # abort thread t
+        if success: print("Calibration complete")
+        t.join()
+        THRESH = THRESH_PROP * max_amp
+        self.terminate = False
+        return success
 
     # detect time it takes for short signal to reach mic
     def receive_burst(self):

@@ -53,13 +53,14 @@ threads.append(ASLThread(3, lambda: detect_signs(s)))
 plt.ion()
 plt.show()
 
-for thread in threads:
-    thread.start()
+if s.calibrate_thresholds(TRANSMIT_FREQ):
+    for thread in threads:
+        thread.start()
 
-s.receive_burst()
+    s.receive_burst()
 
-for thread in threads:
-    thread.join()
+    for thread in threads:
+        thread.join()
 
 # run cleanup
 s.destruct()
