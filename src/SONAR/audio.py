@@ -15,7 +15,7 @@ HEIGHT = 300
 BUFFER_SIZE = 2048
 SOUND_SPEED = 343
 THRESH = 1  # FFT threshold to filter out noise
-STALL_WINDOW_THRESH = 2  # number of stalled windows allowed within a single movement
+STALL_WINDOW_THRESH = 1  # number of stalled windows allowed within a single movement
 ENABLE_DRAW = False  # whether to plot data
 
 class SONAR:
