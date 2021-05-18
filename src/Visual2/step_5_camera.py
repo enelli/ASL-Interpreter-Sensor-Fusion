@@ -17,7 +17,7 @@ from src.SONAR.audio import SONAR
 COUNT = 150
 THRESHOLD = 10
 CONFIDENCE_THRESHOLD = 1
-DRAW_FRAMES = 15  # number of frames to hold at a J
+DRAW_FRAMES = 20  # number of frames to hold at a J
 
 # movement count range for j detection
 J_MOVE_LOW = 7
@@ -53,15 +53,20 @@ def detect_signs(sonar):
 
         num_since_change += 1
 
-        # hold a j for at least DRAW_FRAMES
-        if previous_letter == 'J' and num_since_change < DRAW_FRAMES:
-            continue
-
         # preprocess data
         frame = center_crop(frame)
         frame = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
         x = cv2.resize(frame, (28, 28))
         x = (x - mean) / std
+
+        # hold a j for at least DRAW_FRAMES
+        if previous_letter == 'J' and num_since_change < DRAW_FRAMES:
+            # continue showing output
+            frame = cv2.flip(frame, 1)
+            cv2.putText(frame, previous_letter, (100, 100), cv2.FONT_HERSHEY_SIMPLEX, 2.0, (0, 255, 0), thickness=2)
+            cv2.imshow("Sign Language Translator", frame)
+            cv2.waitKey(1)  # ensure output is drawn
+            continue
 
         # run the predictor
         x = x.reshape(1, 1, 28, 28).astype(np.float32)
