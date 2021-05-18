@@ -23,6 +23,9 @@ DRAW_FRAMES = 20  # number of frames to hold at a J
 J_MOVE_LOW = 7
 J_MOVE_HIGH = 14
 
+# possible letters detected at the end of a J
+J_END_LETTERS = ['I', None]
+
 def center_crop(frame):
     h, w, _ = frame.shape
     start = abs(h - w) // 2
@@ -74,6 +77,8 @@ def detect_signs(sonar):
 
         # artificially bias towards 'I'
         y[0][8] += 10
+        # artificially decrease 'P'
+        y[0][14] -= 10
 
         index = np.argmax(y, axis=1)
         confidence = y[0][index][0]
@@ -131,10 +136,10 @@ def detect_signs(sonar):
         letter = best_letter
 
         #print(letter, frame_letter, previous_letter, potential_j)
-        #if  previous_letter == 'I' and frame_letter in ['H', None] and sonar.movement_flag:
-        if previous_letter == 'I' and potential_j:
-            print(frame_letter)
-            letter = 'J'
+        if potential_j and previous_letter == 'I':
+            print(frame_letter)  # to detecte J_END_LETTERS
+            if frame_letter in J_END_LETTERS:
+                letter = 'J'
 
         # mirror
         frame = cv2.flip(frame, 1)
